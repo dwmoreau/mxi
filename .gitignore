@@ -4,3 +4,5 @@ build/
 *.refl
 # what every program writes where it runs, as DIALS writes dials.*.log
 mxi_*.log
+build-py/
+__pycache__/

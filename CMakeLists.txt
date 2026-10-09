@@ -13,6 +13,15 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
+# The Python module for dials.stills_process, mxi_stills. Off by default, so
+# that a plain build needs no Python; pip turns it on through pyproject.toml.
+# The libraries the module links are static, so they need position-independent
+# code, and that has to be set before any of them is declared.
+option(MXI_PYTHON "Build the mxi_stills Python module" OFF)
+if(MXI_PYTHON)
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
 # No third-party dependencies, deliberately. The spot finder hand-rolled its
 # msgpack writer for the same reason: this has to build on a laptop and on a
 # beamline machine with nothing installed on it.
@@ -351,3 +360,7 @@ add_executable(mxi_tests
 target_link_libraries(mxi_tests PRIVATE mxi)
 target_compile_options(mxi_tests PRIVATE -Wall -Wextra)
 add_test(NAME mxi_tests COMMAND mxi_tests)
+
+# Stills indexing for dials.stills_process: a library of its own over mxi's,
+# and the Python module that stills_process calls it through.
+include(cmake/stills.cmake)

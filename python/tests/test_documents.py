@@ -37,6 +37,7 @@ DOCUMENTS = [
     "docs/conventions.md",
     "docs/spots.md",
     "docs/spots_notes.md",
+    "docs/stills.md",
 ]
 PATH = re.compile(
     r"`([A-Za-z0-9_./-]+/[A-Za-z0-9_.-]+\.(?:md|cc|h|hh|py|cmake|txt|json))`"
@@ -45,10 +46,14 @@ PROGRAM = re.compile(r"`(mxi_[a-z]+)`")
 
 
 def _programs():
-    """Every mxi_ program the build defines, read from the build files."""
+    """Every mxi_ program the build defines, read from the build files, and the
+    Python package pyproject.toml builds."""
     names = set()
     for f in [ROOT / "CMakeLists.txt", *(ROOT / "cmake").glob("*.cmake")]:
         names |= set(re.findall(r"add_executable\(\s*(mxi_[a-z]+)", f.read_text()))
+    pyproject = ROOT / "pyproject.toml"
+    if pyproject.exists():
+        names |= set(re.findall(r'"bindings/(mxi_[a-z]+)"', pyproject.read_text()))
     return names
 
 

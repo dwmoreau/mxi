@@ -91,6 +91,9 @@ CUDA needs nothing pointed at, but it does guess what to build for:
 the binary will actually run on -- `-DCMAKE_CUDA_ARCHITECTURES="80;90"` -- if
 that is not this machine.
 
+The stills indexer for `dials.stills_process`, `mxi_stills`, is a Python
+module built with `pip install .`. See `docs/stills.md`.
+
 ## Usage
 
 **What you need:** the images, as an NXmx HDF5 master file and its data files.
