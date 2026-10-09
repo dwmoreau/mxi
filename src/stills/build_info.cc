@@ -14,4 +14,4 @@ BuildInfo build_info() {
   };
 }
 
-}  // namespace mxi::stills
+} // namespace mxi::stills
