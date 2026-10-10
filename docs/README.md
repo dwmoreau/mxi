@@ -19,6 +19,7 @@ its conclusions sometimes overturned later, with an index of those.
 | `docs/scaling.md` | reference | `mxi_scale` |
 | `docs/spots.md` | reference | the spot finder, `mxi_find` |
 | `docs/stills.md` | reference | `mxi_stills`, stills indexing as a Python module for dials.stills_process |
+| `docs/stills-review.md` | guide | every place `mxi_stills` departs from dials, and why |
 | `docs/gpu.md` | reference | where integration's, indexing's and refinement's time goes, and what a device would take; the refinement target's port, designed and not written |
 | `docs/conventions.md` | reference | conventions checked against DIALS' files, and what is not |
 | `CLAUDE.md` | notes | invariants and lessons across the pipeline |

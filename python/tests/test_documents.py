@@ -38,6 +38,7 @@ DOCUMENTS = [
     "docs/spots.md",
     "docs/spots_notes.md",
     "docs/stills.md",
+    "docs/stills-review.md",
 ]
 PATH = re.compile(
     r"`([A-Za-z0-9_./-]+/[A-Za-z0-9_.-]+\.(?:md|cc|h|hh|py|cmake|txt|json))`"
