@@ -19,6 +19,9 @@ add_library(mxi_stills STATIC
   src/stills/crystal.cc
   src/stills/geometry.cc
   src/stills/index.cc
+  src/stills/lbfgs.cc
+  src/stills/nave.cc
+  src/stills/outliers.cc
   src/stills/predict.cc
   src/stills/refine.cc
 )
@@ -34,6 +37,7 @@ target_compile_options(mxi_stills PRIVATE -Wall -Wextra -Wpedantic
 add_executable(mxi_stills_tests
   tests/main.cc
   tests/stills/test_geometry.cc
+  tests/stills/test_outliers.cc
   tests/stills/test_refine.cc
 )
 target_include_directories(mxi_stills_tests PRIVATE tests)

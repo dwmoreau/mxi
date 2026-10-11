@@ -7,6 +7,7 @@
 //
 //   px -> mm   dxtbx ParallaxCorrectedPxMmStrategy::to_millimeter, i.e.
 //              parallax_correction_inv evaluated at the uncorrected position;
+//   mm -> px   its to_pixel, the forward correction then the pixel size;
 //   variance   the pixel variance times the pixel size squared, with the
 //              parallax Jacobian ignored (dials centroid_px_to_mm_panel);
 //   mm -> lab  VirtualPanel::get_lab_coord, d * (x, y, 1);
@@ -53,6 +54,10 @@ struct StillsPanel {
   double attenuation_length(const Vec3 &u) const;
 
   std::pair<double, double> px_to_mm(double px_fast, double px_slow) const;
+
+  // dxtbx ParallaxCorrectedPxMmStrategy::to_pixel: the forward parallax
+  // correction at the millimetre position, then the pixel size.
+  std::pair<double, double> mm_to_px(double mm_fast, double mm_slow) const;
 
   Vec3 lab_coord(double mm_fast, double mm_slow) const {
     return Vec3{fast.x * mm_fast + slow.x * mm_slow + origin.x,

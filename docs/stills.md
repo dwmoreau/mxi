@@ -27,6 +27,14 @@ library. The module wraps it with pybind11 (`bindings/`).
   least-squares problem at the starting model. `AxisDerivative` chooses the
   form of the rotation-axis term of the Jacobian: `dials` (the default),
   `dials_limit`, or `analytic`.
+- **Outlier rejection and mosaicity** (`src/stills/outliers.hh`,
+  `src/stills/nave.hh`, with `lbfgs.hh`). `sauter_poon` rejects spots by the
+  Rayleigh fit of their distances from prediction, and `nave_parameters` fits a
+  crystal's mosaicity and domain size to its Delta-Psi and returns the
+  reflections inside the fitted band, as dials' stills indexer does both.
+  `lbfgs::run` is scitbx's L-BFGS minimiser, which both fits use.
+  `StillsPanel::mm_to_px` is dxtbx's millimetre-to-pixel conversion with the
+  parallax correction.
 - **The entry point** (`src/stills/index.hh`). `index_still` maps the spots and
   returns "not indexed", because there is no search yet.
 - **The Python side** (`bindings/mxi_stills/dxtbx_adapter.py`). It builds the
@@ -38,9 +46,10 @@ library. The module wraps it with pybind11 (`bindings/`).
 
 The tests in `tests/stills/` (`mxi_stills_tests`) check the geometry against
 dials' own values for real spots on detectors of 256, 32, 8 and 1 panels, and
-the refinement against dials' own runs on real stills in five space groups.
-Those values are in `tests/stills/real_stills.hh` and
-`tests/stills/real_refine.hh`, which are generated.
+the refinement against dials' own runs on real stills in five space groups,
+and the outlier rejection and Nave fit against dials' own calls. Those values
+are in `tests/stills/real_stills.hh`, `tests/stills/real_refine.hh` and
+`tests/stills/real_outliers.hh`, which are generated.
 
 ## Building
 

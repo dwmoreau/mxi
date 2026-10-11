@@ -9,6 +9,7 @@ reason: a measured cost, with the run that measured it, or a stated weakness of 
 |---|---|---|---|---|---|
 | 1 | 2026-10-11 | Refinement stops, crystal unchanged, when the equations number fewer than the free parameters (3N < P) | dials' LevMar `dof = 3N - P` is a `size_t` (scitbx `normal_equations.h`), so it wraps and dials iterates on an underdetermined system | The wrap is an unsigned-arithmetic accident, and the result is a model fitted to fewer equations than parameters | 1 LevMar run on each of lysozyme and luciferase in the R6 replay (spec: 16 and 37 on the full sets). Each is the first refinement of an outlier pass with N = 1 or 2 spots, whose Sauter-Poon step then fails for N < 10, so no frame's outcome changes |
 | 2 | 2026-10-11 | No detector parameterisation is built, so the panel frames are not recomposed on every refinement | dials builds a hierarchical detector parameterisation on every refiner build, whose `compose()` rewrites the copied panels at about 1e-12 mm and is written back to the experiment (spec 9.2) | The detector is fixed on every configuration (STATUS 3, decided 2026-10-10); the parameterisation exists only to be discarded | None resolvable here: on 5,186 captured runs the starting objective and RMSDs agree with dials to 4.4e-12 relative |
+| 3 | 2026-10-11 | d-spacings, 2-theta and the cell volume for the Nave fit come from B: d = 1/\|Bh\|, V = 1/det B | dials takes them from cctbx's unit cell, rebuilt from the crystal's parameters (`crystal.get_unit_cell().d()`, `.two_theta()`, `.volume()`) | No cctbx in the C++; the unit-cell object exists only to answer these three questions | On the 2,403 single-crystal Nave fits of the R7 replay: d within 7.3e-16 relative and the volume within 7.0e-16; every outcome and every acceptance flag the same as dials'. The 2-theta order (ties between reflections of equal spacing) differs in 59 fits, none of them among the 13 below. alpha and eta agree within 1e-6 relative on 2,204 of the 2,217 fits that complete; the other 13 take the same L-BFGS path, with the same iteration and call counts, to points up to 4.5e-4 apart (eta, one psii fit) whose objectives agree to 3.8e-9 relative: a flat direction of the likelihood, the same class as the refinement replay's flat valley |
 
 ## What follows dials exactly
 
@@ -50,6 +51,34 @@ end points differ by up to a few 1e-4 degrees (one psii run 1e-2), and the objec
 end points, evaluated by one function, agrees to 5.4e-8 relative on every run except the two
 in row 1. Evidence: `stills_process_profiling/claude/rewrite/runs/r6-refine/`.
 
+**Sauter-Poon outlier rejection** (`src/stills/outliers`, with `lbfgs`). rstbx's
+`find_outliers_from_matches` on a first pass, as dials' stills indexer calls it (Sauter & Poon
+2010): radial distances between observed and calculated positions in millimetres (each pixel
+position times panel 0's pixel size, as dials forms them), two equal distances an error, the
+empirical CDF k/N, the Rayleigh fit on the smallest int(0.4 N) from the last of them, its L1
+objective with the L2 gradient, scitbx's L-BFGS with scitbx.lbfgs.run's termination and
+exception handling, the 0.655 sigma bar, and every spot from the first crossing outward
+rejected. The calculated pixel position is dxtbx's `millimeter_to_pixel` with the forward
+parallax correction (`StillsPanel::mm_to_px`).
+
+**The Nave fit** (`src/stills/nave`). dials' `NaveParameters` for one crystal (Sauter et al.
+2014, eq. 16 and appendix B): the binned seed in 2-theta order, the 2x2 solve as scitbx.matrix
+forms it, the 3 V^(1/3) floor on the domain size, serialtbx's maximum-likelihood objective and
+its coded gradient, L-BFGS with gtol 0.1 and the drop test, the acceptance band, the 1.4
+widening and the Ewald proximal volume reject at 0.0025. The L-BFGS is scitbx's (Liu & Nocedal
+1989; More & Thuente 1994) followed line by line, because the fits stop on tests that a
+different minimiser would meet at different points.
+
+On every Sauter-Poon pass and Nave fit dials makes on the R3 corpus (2,728 passes and 2,403
+fits on single crystals), replayed from their captured inputs: every outcome is the same,
+including dials' 100 too-few rejections, 25 diverged fits and 161 Ewald-volume rejections;
+every kept and accepted flag is the same; the fitted sigma, the seed, alpha, eta, the crystal's
+half-mosaicity and domain size and the Ewald volume are bit-identical, and the minimiser takes
+the same number of iterations and function calls. The calculated pixel positions are
+bit-identical to dials' on every reflection. The minimiser alone matches scitbx's final point,
+iteration and call counts on the Rosenbrock function to the last bit (tests/stills). Evidence:
+`stills_process_profiling/claude/rewrite/runs/r7-outliers-nave/`.
+
 Not yet departures, but named as candidates:
 - **The rotation-axis derivative.** dials' `drde` moves the unit axis e1 along the part of
   dq0 x s0 perpendicular to it; the derivative of e1 = normalise(q0 x s0) divides that by
@@ -58,6 +87,16 @@ Not yet departures, but named as candidates:
   `axis_derivative = analytic` the replay meets the 1e-4 degree tolerance on 97.6 % of runs
   (5,060 of 5,186), and every miss but the two in row 1 is in the flat valley; the C++ ends at a
   lower objective than dials on 71-85 % of runs per dataset. The default stays `dials`.
- replacing Nave's mosaicity with a stills
-partiality model, and replacing Niggli reduction with Selling reduction if a profile shows that
-reduction costs time.
+- **The Sauter-Poon bar.** The paper rejects a spot more than sigma beyond the fitted curve
+  (eq. 6, Fig. 3c); rstbx uses the Rayleigh standard deviation, 0.655 sigma, and rejects every
+  spot from the first crossing outward, where eq. 6 classifies each spot on its own.
+- **The integration predictor's mosaic term.** dials' `NaveStillsReflectionPredictor` adds a
+  quarter of the fitted full mosaicity where eq. 16 adds a half, so integration accepts a
+  narrower band than the fit describes. Not in this library yet; it matters when integration
+  is.
+- **Replacing Nave's mosaicity** with a stills partiality model. Its "mosaicity" and domain size
+  are fitted parameters with a loose physical meaning, the 1.4 widening and the Ewald-volume
+  limit are empirical, and a replacement is to be scored by merged statistics, not by agreement
+  with Nave.
+- **Selling reduction** in place of Niggli reduction, if a profile shows that reduction costs
+  time.

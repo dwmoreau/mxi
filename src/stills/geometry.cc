@@ -29,6 +29,18 @@ std::pair<double, double> StillsPanel::px_to_mm(double px_fast,
   return {x - u.dot(fast) * length, y - u.dot(slow) * length};
 }
 
+std::pair<double, double> StillsPanel::mm_to_px(double mm_fast,
+                                                double mm_slow) const {
+  double x = mm_fast, y = mm_slow;
+  if (parallax()) {
+    const Vec3 u = (origin + fast * x + slow * y).normalized();
+    const double length = attenuation_length(u);
+    x = x + u.dot(fast) * length;
+    y = y + u.dot(slow) * length;
+  }
+  return {x / pixel_size[0], y / pixel_size[1]};
+}
+
 const StillsPanel &StillsDetector::panel(std::int64_t index) const {
   if (index < 0 || static_cast<std::size_t>(index) >= panels.size())
     throw GeometryError("panel " + std::to_string(index) +

@@ -12,6 +12,8 @@
 #include "stills/build_info.hh"
 #include "stills/geometry.hh"
 #include "stills/index.hh"
+#include "stills/nave.hh"
+#include "stills/outliers.hh"
 #include "stills/refine.hh"
 
 namespace py = pybind11;
@@ -222,6 +224,42 @@ py::dict to_dict(const RefineResult &r) {
   return out;
 }
 
+std::vector<double> column(const Array &a, py::ssize_t rows, py::ssize_t col,
+                           const char *name) {
+  require_shape(a, rows, a.ndim() == 2 ? a.shape(1) : 0, name);
+  std::vector<double> v(static_cast<std::size_t>(rows));
+  for (py::ssize_t i = 0; i < rows; ++i)
+    v[static_cast<std::size_t>(i)] = a.ndim() == 2 ? a.at(i, col) : a.at(i);
+  return v;
+}
+
+py::array_t<bool> to_bool_array(const std::vector<bool> &v) {
+  py::array_t<bool> a(static_cast<py::ssize_t>(v.size()));
+  for (std::size_t i = 0; i < v.size(); ++i)
+    a.mutable_at(static_cast<py::ssize_t>(i)) = v[i];
+  return a;
+}
+
+py::dict to_dict(const lbfgs::Result &r) {
+  py::dict out;
+  out["failure"] = std::string(lbfgs::to_string(r.failure));
+  out["raised"] = r.raised;
+  out["iter"] = r.iter;
+  out["nfun"] = r.nfun;
+  return out;
+}
+
+std::vector<std::array<int, 3>> miller_of(const IndexArray &miller) {
+  const py::ssize_t n = miller.ndim() == 2 ? miller.shape(0) : -1;
+  require_shape(miller, n, 3, "miller_index");
+  std::vector<std::array<int, 3>> h(static_cast<std::size_t>(n));
+  for (py::ssize_t i = 0; i < n; ++i)
+    for (py::ssize_t c = 0; c < 3; ++c)
+      h[static_cast<std::size_t>(i)][static_cast<std::size_t>(c)] =
+          static_cast<int>(miller.at(i, c));
+  return h;
+}
+
 } // namespace
 
 PYBIND11_MODULE(_mxi_stills, m) {
@@ -372,4 +410,114 @@ PYBIND11_MODULE(_mxi_stills, m) {
       "Stills predictions (X, Y in mm, Delta-Psi, s1) of each reflection for "
       "the crystal A = U B; predicted is 0 where a reflection cannot be "
       "predicted or misses its panel's plane.");
+
+  m.def(
+      "mm_to_px",
+      [](const StillsDetector &detector, const IndexArray &panel,
+         const Array &xyz_mm) {
+        const py::ssize_t n = panel.ndim() == 1 ? panel.shape(0) : -1;
+        require_shape(panel, n, 0, "panel");
+        require_shape(xyz_mm, n, xyz_mm.ndim() == 2 ? xyz_mm.shape(1) : 0,
+                      "xyz_mm");
+        Array out({n, py::ssize_t{2}});
+        auto r = out.mutable_unchecked<2>();
+        for (py::ssize_t i = 0; i < n; ++i) {
+          const auto [x, y] = detector.panel(panel.at(i))
+                                  .mm_to_px(xyz_mm.at(i, 0), xyz_mm.at(i, 1));
+          r(i, 0) = x;
+          r(i, 1) = y;
+        }
+        return out;
+      },
+      py::arg("detector"), py::arg("panel"), py::arg("xyz_mm"),
+      "Millimetre positions on their panels to pixels, as dxtbx's "
+      "millimeter_to_pixel does with the parallax correction.");
+
+  m.def(
+      "sauter_poon",
+      [](const Array &obs_mm, const Array &calc_mm) {
+        const py::ssize_t n = obs_mm.ndim() == 2 ? obs_mm.shape(0) : -1;
+        const auto x_obs = column(obs_mm, n, 0, "obs_mm");
+        const auto y_obs = column(obs_mm, n, 1, "obs_mm");
+        const auto x_calc = column(calc_mm, n, 0, "calc_mm");
+        const auto y_calc = column(calc_mm, n, 1, "calc_mm");
+        SauterPoonResult r;
+        {
+          py::gil_scoped_release release;
+          r = sauter_poon(x_obs, y_obs, x_calc, y_calc);
+        }
+        py::dict out;
+        out["status"] = std::string(to_string(r.status));
+        out["kept"] = to_bool_array(r.kept);
+        out["sigma"] = r.sigma;
+        out["sigma_start"] = r.sigma_start;
+        out["sd"] = r.sd;
+        out["n_fit"] = r.n_fit;
+        out["first_rejected"] = r.first_rejected;
+        out["lbfgs"] = to_dict(r.minimiser);
+        return out;
+      },
+      py::arg("obs_mm"), py::arg("calc_mm"),
+      "Sauter-Poon outlier rejection on observed and calculated spot "
+      "positions (n, 2) in mm, as dials' stills indexer runs it.");
+
+  m.def(
+      "nave_parameters",
+      [](const Array &delpsi, const Array &d, const Array &two_theta,
+         double volume, double wavelength, double ewald_proximal_volume_max,
+         double resolution_cutoff, double expansion) {
+        const py::ssize_t n = delpsi.ndim() == 1 ? delpsi.shape(0) : -1;
+        const auto psi = column(delpsi, n, 0, "delpsi");
+        const auto dv = column(d, n, 0, "d");
+        const auto tt = column(two_theta, n, 0, "two_theta");
+        NaveOptions options;
+        options.ewald_proximal_volume_max = ewald_proximal_volume_max;
+        options.ewald_proximity_resolution_cutoff = resolution_cutoff;
+        options.model_expansion_factor = expansion;
+        NaveResult r;
+        {
+          py::gil_scoped_release release;
+          r = nave_parameters(psi, dv, tt, volume, wavelength, options);
+        }
+        py::dict out;
+        out["status"] = std::string(to_string(r.status));
+        out["failed"] = failed(r.status);
+        out["eta_seed"] = r.eta_seed;
+        out["domain_size_seed"] = r.domain_size_seed;
+        out["alpha"] = r.alpha;
+        out["eta"] = r.eta;
+        out["accepted"] = to_bool_array(r.accepted);
+        out["half_mosaicity_deg"] = r.half_mosaicity_deg;
+        out["domain_size_ang"] = r.domain_size_ang;
+        out["ewald_volume"] = r.ewald_volume;
+        out["lbfgs"] = to_dict(r.minimiser);
+        return out;
+      },
+      py::arg("delpsi"), py::arg("d"), py::arg("two_theta"), py::arg("volume"),
+      py::arg("wavelength"), py::arg("ewald_proximal_volume_max") = 0.0025,
+      py::arg("resolution_cutoff") = 2.0, py::arg("expansion") = 1.4,
+      "dials' Nave mosaicity and domain-size fit of a crystal's Delta-Psi "
+      "(radians) against d (A) and 2-theta (degrees), with its acceptance "
+      "flags and Ewald proximal volume test.");
+
+  m.def(
+      "cell_d_spacings",
+      [](const Array &B, const IndexArray &miller) {
+        const auto d = cell_d_spacings(mat3(B, "B"), miller_of(miller));
+        return Array(static_cast<py::ssize_t>(d.size()), d.data());
+      },
+      py::arg("B"), py::arg("miller_index"), "d = 1 / |B h| (A).");
+
+  m.def(
+      "two_theta_deg",
+      [](const Array &d, double wavelength) {
+        const py::ssize_t n = d.ndim() == 1 ? d.shape(0) : -1;
+        const auto t = two_theta_deg(column(d, n, 0, "d"), wavelength);
+        return Array(static_cast<py::ssize_t>(t.size()), t.data());
+      },
+      py::arg("d"), py::arg("wavelength"), "2 asin(lambda / 2d) in degrees.");
+
+  m.def(
+      "cell_volume", [](const Array &B) { return cell_volume(mat3(B, "B")); },
+      py::arg("B"), "The direct cell volume 1 / det B (A^3).");
 }
