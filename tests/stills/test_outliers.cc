@@ -184,6 +184,52 @@ TEST(stills_nave_matches_dials) {
   }
 }
 
+// A lysozyme fit (s0059_master_01330, call 11) whose first line search steps
+// to a band ~60 times too narrow: serialtbx's evaluation overflows there, and
+// the log-sum-exp form lets the search step back. The values are those of the
+// Python reference in claude/scripts/rewrite/r7_safe_check.py.
+TEST(stills_nave_safe_likelihood_recovers_an_overflowing_fit) {
+  const std::vector<double> delpsi = {
+      0x1.08174da4d7409p-10, 0x1.177d2711dba62p-10, 0x1.d702340f3747cp-13,
+      -0x1.5fa07e6f2f974p-12};
+  const std::vector<double> d = {0x1.d4142dccf2b7ep+2, 0x1.e2b1a3e64c50ep+2,
+                                 0x1.8f3260d71ad8ap+2, 0x1.ecaad2c6dd37cp+2};
+  const std::vector<double> two_theta = {
+      0x1.66a95104dd1e7p+3, 0x1.5bc4c28d1c4f6p+3, 0x1.a4cd3e12ee67ap+3,
+      0x1.54b53c90fa5f8p+3};
+  const double volume = 0x1.d0b0c773f0c25p+17;
+  const double wavelength = 0x1.6dad7518b0d0fp+0;
+
+  const NaveResult plain =
+      nave_parameters(delpsi, d, two_theta, volume, wavelength);
+  check::is_true(plain.status == NaveStatus::diverged,
+                 std::string("plain: ") + to_string(plain.status));
+
+  NaveOptions options;
+  options.safe_likelihood = true;
+  const NaveResult safe =
+      nave_parameters(delpsi, d, two_theta, volume, wavelength, options);
+  check::is_true(safe.status == NaveStatus::ok,
+                 std::string("safe: ") + to_string(safe.status));
+  check::is_true(safe.alpha == 0x1.1527ecaa505dcp-15, "alpha");
+  check::is_true(safe.eta == 0x1.1959dec2aa125p-9, "eta");
+  check::equal(static_cast<long long>(safe.minimiser.iter), 5LL, "iterations");
+  check::equal(static_cast<long long>(safe.minimiser.nfun), 23LL,
+               "function calls");
+}
+
+TEST(stills_nave_safe_likelihood_leaves_a_good_fit_alone) {
+  for (const auto &c : real_outliers::nave_cases()) {
+    if (c.accepted.empty())
+      continue;
+    NaveOptions options;
+    options.safe_likelihood = true;
+    const NaveResult r = nave_parameters(c.delpsi, c.d, c.two_theta, c.volume,
+                                         c.wavelength, options);
+    check::is_true(r.alpha == c.alpha && r.eta == c.eta, c.name);
+  }
+}
+
 TEST(stills_nave_needs_three_reflections) {
   const NaveResult r =
       nave_parameters({1e-3, -2e-3}, {3.0, 2.5}, {10.0, 12.0}, 1e5, 1.0);

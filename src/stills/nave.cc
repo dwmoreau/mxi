@@ -37,8 +37,9 @@ double sum_of(const std::vector<double> &v) {
 // Delta-Psi values and its gradient in (log alpha, log eta).
 class Likelihood {
 public:
-  Likelihood(const std::vector<double> &d, const std::vector<double> &psi)
-      : d_(d), psi_(psi), safelog_(-1. + std::log(DBL_MAX)) {}
+  Likelihood(const std::vector<double> &d, const std::vector<double> &psi,
+             bool safe)
+      : d_(d), psi_(psi), safelog_(-1. + std::log(DBL_MAX)), safe_(safe) {}
 
   double operator()(const std::vector<double> &x,
                     std::vector<double> &g) const {
@@ -46,6 +47,8 @@ public:
       throw ObjectiveFailure{NaveStatus::outside_domain};
     const double alpha = std::exp(x[0]);
     const double eta = std::exp(x[1]);
+    if (safe_ && overflows(alpha, eta))
+      return log_sum_exp_form(alpha, eta, g);
     const double f = functional(alpha, eta);
     double g0 = 0., g1 = 0.;
     const double expnu = 1. + std::exp(kEscalate);
@@ -90,6 +93,56 @@ public:
   }
 
 private:
+  // Whether serialtbx's evaluation at (alpha, eta) would end the fit.
+  bool overflows(double alpha, double eta) const {
+    for (std::size_t i = 0; i < d_.size(); ++i) {
+      const double psi_model = (d_[i] * alpha + eta) / 2.;
+      const double B = kEscalate / psi_model;
+      if (psi_model > 1e100 || 0.5 * d_[i] * alpha > 1e100 ||
+          std::exp(B * (psi_[i] + psi_model)) > 1e100 ||
+          std::exp(-B * (psi_[i] - psi_model)) > 1e100)
+        return true;
+    }
+    return false;
+  }
+
+  // -log prob = log(2 psi_model) + softplus(a+) + softplus(a-) - 2 log(1 +
+  // e^10) with a+- = B (psi_model +- psi), and its derivative through
+  // psi_model.
+  double log_sum_exp_form(double alpha, double eta,
+                          std::vector<double> &g) const {
+    const double log_expnu = std::log1p(std::exp(kEscalate));
+    double f = 0.0, g0 = 0.0, g1 = 0.0;
+    for (std::size_t i = 0; i < d_.size(); ++i) {
+      const double pm = (d_[i] * alpha + eta) / 2.;
+      const double B = kEscalate / pm;
+      const double psi = psi_[i];
+      const double a_pos = B * (psi + pm);
+      const double a_neg = -B * (psi - pm);
+      f += std::log(2.0 * pm) + softplus(a_pos) + softplus(a_neg) -
+           2 * log_expnu;
+      const double z = kEscalate * psi / (pm * pm);
+      const double df_dpm =
+          1.0 / pm - z * logistic(a_pos) + z * logistic(a_neg);
+      g0 += df_dpm * 0.5 * d_[i] * alpha;
+      g1 += df_dpm * 0.5 * eta;
+    }
+    g[0] = g0;
+    g[1] = g1;
+    return f;
+  }
+
+  static double softplus(double a) {
+    return std::max(a, 0.0) + std::log1p(std::exp(-std::abs(a)));
+  }
+
+  static double logistic(double a) {
+    if (a >= 0.0)
+      return 1.0 / (1.0 + std::exp(-a));
+    const double e = std::exp(a);
+    return e / (1.0 + e);
+  }
+
   double functional(double alpha, double eta) const {
     const double expnu = 1 + std::exp(kEscalate);
     double f = 0.;
@@ -113,6 +166,7 @@ private:
 
   const std::vector<double> &d_, &psi_;
   const double safelog_;
+  const bool safe_;
 };
 
 // NaveParameters.ewald_proximal_volume: half the volume of reciprocal space
@@ -236,7 +290,7 @@ NaveResult nave_parameters(const std::vector<double> &delpsi,
   // The maximum-likelihood fit.
   std::vector<double> x{std::log(2. / out.domain_size_seed),
                         std::log(out.eta_seed)};
-  const Likelihood likelihood(d, delpsi);
+  const Likelihood likelihood(d, delpsi, options.safe_likelihood);
   lbfgs::CoreParameters core;
   core.gtol = 0.1;
   lbfgs::TerminationParameters termination;

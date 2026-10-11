@@ -18,6 +18,11 @@
 //             1.4 (the half-mosaicity multiplied, the domain size divided)
 //   reject    the crystal when its Ewald proximal volume exceeds the limit
 //
+// With safe_likelihood, wherever serialtbx's exponentials would pass 1e100 the
+// same likelihood and gradient are evaluated in log-sum-exp form, so a line
+// search step far outside the data gets a large finite value instead of
+// ending the fit as diverged. Elsewhere the evaluation is serialtbx's.
+//
 // d, 2-theta and the cell volume come from the crystal; cell_d_spacings and
 // friends compute them from B.
 
@@ -36,6 +41,7 @@ struct NaveOptions {
   double ewald_proximal_volume_max = 0.0025;
   double ewald_proximity_resolution_cutoff = 2.0; // Angstrom
   double model_expansion_factor = 1.4;
+  bool safe_likelihood = false;
 };
 
 enum class NaveStatus {

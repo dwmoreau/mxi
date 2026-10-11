@@ -465,7 +465,7 @@ PYBIND11_MODULE(_mxi_stills, m) {
       "nave_parameters",
       [](const Array &delpsi, const Array &d, const Array &two_theta,
          double volume, double wavelength, double ewald_proximal_volume_max,
-         double resolution_cutoff, double expansion) {
+         double resolution_cutoff, double expansion, bool safe_likelihood) {
         const py::ssize_t n = delpsi.ndim() == 1 ? delpsi.shape(0) : -1;
         const auto psi = column(delpsi, n, 0, "delpsi");
         const auto dv = column(d, n, 0, "d");
@@ -474,6 +474,7 @@ PYBIND11_MODULE(_mxi_stills, m) {
         options.ewald_proximal_volume_max = ewald_proximal_volume_max;
         options.ewald_proximity_resolution_cutoff = resolution_cutoff;
         options.model_expansion_factor = expansion;
+        options.safe_likelihood = safe_likelihood;
         NaveResult r;
         {
           py::gil_scoped_release release;
@@ -496,6 +497,7 @@ PYBIND11_MODULE(_mxi_stills, m) {
       py::arg("delpsi"), py::arg("d"), py::arg("two_theta"), py::arg("volume"),
       py::arg("wavelength"), py::arg("ewald_proximal_volume_max") = 0.0025,
       py::arg("resolution_cutoff") = 2.0, py::arg("expansion") = 1.4,
+      py::arg("safe_likelihood") = false,
       "dials' Nave mosaicity and domain-size fit of a crystal's Delta-Psi "
       "(radians) against d (A) and 2-theta (degrees), with its acceptance "
       "flags and Ewald proximal volume test.");
