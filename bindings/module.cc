@@ -7,13 +7,17 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 #include "stills/build_info.hh"
+#include "stills/candidates.hh"
+#include "stills/cell.hh"
 #include "stills/geometry.hh"
 #include "stills/index.hh"
 #include "stills/nave.hh"
 #include "stills/outliers.hh"
+#include "stills/reduction.hh"
 #include "stills/refine.hh"
 
 namespace py = pybind11;
@@ -271,6 +275,9 @@ PYBIND11_MODULE(_mxi_stills, m) {
   m.attr("compiler") = info.compiler;
 
   py::register_exception<GeometryError>(m, "GeometryError", PyExc_ValueError);
+  py::register_exception<CellError>(m, "CellError", PyExc_ValueError);
+  py::register_exception<NiggliLimitExceeded>(m, "NiggliLimitExceeded",
+                                              PyExc_RuntimeError);
 
   py::class_<StillsDetector>(m, "Detector")
       .def(py::init(&make_detector), py::arg("origin"), py::arg("fast"),
@@ -522,4 +529,98 @@ PYBIND11_MODULE(_mxi_stills, m) {
   m.def(
       "cell_volume", [](const Array &B) { return cell_volume(mat3(B, "B")); },
       py::arg("B"), "The direct cell volume 1 / det B (A^3).");
+  m.def(
+      "niggli_reduction",
+      [](const Array &params, double relative_epsilon,
+         std::size_t iteration_limit) {
+        require_shape(params, 6, 0, "params");
+        const double *p = params.data();
+        const auto r = niggli_reduction(
+            UnitCell::from_parameters({p[0], p[1], p[2], p[3], p[4], p[5]}),
+            relative_epsilon, iteration_limit);
+        IndexArray m({py::ssize_t{3}, py::ssize_t{3}});
+        std::copy(r.r_inv.begin(), r.r_inv.end(), m.mutable_data());
+        return py::make_tuple(m, r.n_iterations);
+      },
+      py::arg("params"), py::arg("relative_epsilon") = 1e-5,
+      py::arg("iteration_limit") = 1000,
+      "cctbx's Niggli reduction of a cell (a, b, c, alpha, beta, gamma): the "
+      "product of its step matrices (new vector j = sum_i r_inv[i, j] old i) "
+      "and the number of steps.");
+
+  m.def(
+      "candidate_orientation_matrices",
+      [](const Array &basis_vectors) {
+        const py::ssize_t n =
+            basis_vectors.ndim() == 2 ? basis_vectors.shape(0) : -1;
+        require_shape(basis_vectors, n, 3, "basis_vectors");
+        std::vector<mxi::Vec3> v(static_cast<std::size_t>(n));
+        for (py::ssize_t i = 0; i < n; ++i)
+          v[static_cast<std::size_t>(i)] = {basis_vectors.at(i, 0),
+                                            basis_vectors.at(i, 1),
+                                            basis_vectors.at(i, 2)};
+        const auto models = candidate_orientation_matrices(v);
+        const auto k = static_cast<py::ssize_t>(models.size());
+        Array A({k, py::ssize_t{3}, py::ssize_t{3}});
+        Array cell({k, py::ssize_t{6}});
+        auto a = A.mutable_unchecked<3>();
+        auto c = cell.mutable_unchecked<2>();
+        for (py::ssize_t i = 0; i < k; ++i) {
+          const auto &x = models[static_cast<std::size_t>(i)];
+          const mxi::Mat3 UB = x.A();
+          for (py::ssize_t r = 0; r < 3; ++r)
+            for (py::ssize_t s = 0; s < 3; ++s)
+              a(i, r, s) =
+                  UB(static_cast<std::size_t>(r), static_cast<std::size_t>(s));
+          for (py::ssize_t j = 0; j < 6; ++j)
+            c(i, j) = x.cell.params[static_cast<std::size_t>(j)];
+        }
+        return py::make_tuple(A, cell);
+      },
+      py::arg("basis_vectors"),
+      "dials' candidate crystal models from real-space basis vectors (A): "
+      "each model's A = UB and its cell parameters, in dials' order.");
+
+  m.def(
+      "assign_indices_global",
+      [](const Array &rlp, const IndexArray &id, const Array &A,
+         std::optional<double> d_min, double tolerance) {
+        const py::ssize_t n = rlp.ndim() == 2 ? rlp.shape(0) : -1;
+        require_shape(rlp, n, 3, "rlp");
+        require_shape(id, n, 0, "id");
+        const py::ssize_t k = A.ndim() == 3 ? A.shape(0) : -1;
+        if (k < 0 || A.shape(1) != 3 || A.shape(2) != 3)
+          throw py::value_error("A: expected shape (n, 3, 3)");
+        std::vector<mxi::Vec3> points(static_cast<std::size_t>(n));
+        std::vector<int> ids(static_cast<std::size_t>(n));
+        for (py::ssize_t i = 0; i < n; ++i) {
+          points[static_cast<std::size_t>(i)] = {rlp.at(i, 0), rlp.at(i, 1),
+                                                 rlp.at(i, 2)};
+          ids[static_cast<std::size_t>(i)] = static_cast<int>(id.at(i));
+        }
+        std::vector<mxi::Mat3> UB(static_cast<std::size_t>(k));
+        for (py::ssize_t l = 0; l < k; ++l)
+          for (py::ssize_t r = 0; r < 3; ++r)
+            for (py::ssize_t s = 0; s < 3; ++s)
+              UB[static_cast<std::size_t>(l)](static_cast<std::size_t>(r),
+                                              static_cast<std::size_t>(s)) =
+                  A.at(l, r, s);
+        const auto out = assign_indices_global(points, ids, UB,
+                                               d_min.value_or(0.0), tolerance);
+        IndexArray miller({n, py::ssize_t{3}});
+        IndexArray crystal(n);
+        auto m3 = miller.mutable_unchecked<2>();
+        auto c1 = crystal.mutable_unchecked<1>();
+        for (py::ssize_t i = 0; i < n; ++i) {
+          const auto j = static_cast<std::size_t>(i);
+          for (py::ssize_t c = 0; c < 3; ++c)
+            m3(i, c) = out.miller_index[j][static_cast<std::size_t>(c)];
+          c1(i) = out.id[j];
+        }
+        return py::make_tuple(miller, crystal);
+      },
+      py::arg("rlp"), py::arg("id"), py::arg("A"),
+      py::arg("d_min") = py::none(), py::arg("tolerance") = 0.3,
+      "dials' AssignIndicesGlobal on one image: miller_index and the crystal "
+      "of every row, (0, 0, 0) and -1 where unassigned.");
 }

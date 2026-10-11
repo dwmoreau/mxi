@@ -38,6 +38,13 @@ library. The module wraps it with pybind11 (`bindings/`).
   `lbfgs::run` is scitbx's L-BFGS minimiser, which both fits use.
   `StillsPanel::mm_to_px` is dxtbx's millimetre-to-pixel conversion with the
   parallax correction.
+- **Candidates and index assignment** (`src/stills/candidates.hh`, with
+  `reduction.hh` and `cell.hh`). `candidate_orientation_matrices` makes dials'
+  candidate crystal models from a search's basis vectors, Niggli-reduced as
+  cctbx reduces them (`niggli_reduction`), and `assign_indices_global` indexes
+  a still's spots against one or more crystals as dials'
+  `AssignIndicesGlobal` does. `UnitCell` and `CrystalModel` compute a cell and
+  a crystal as cctbx's `unit_cell` and dxtbx's `Crystal` do.
 - **The entry point** (`src/stills/index.hh`). `index_still` maps the spots and
   returns "not indexed", because there is no search yet.
 - **The Python side** (`bindings/mxi_stills/dxtbx_adapter.py`). It builds the
@@ -50,9 +57,11 @@ library. The module wraps it with pybind11 (`bindings/`).
 The tests in `tests/stills/` (`mxi_stills_tests`) check the geometry against
 dials' own values for real spots on detectors of 256, 32, 8 and 1 panels, and
 the refinement against dials' own runs on real stills in five space groups,
-and the outlier rejection and Nave fit against dials' own calls. Those values
-are in `tests/stills/real_stills.hh`, `tests/stills/real_refine.hh` and
-`tests/stills/real_outliers.hh`, which are generated.
+the outlier rejection and Nave fit against dials' own calls, and the cell
+reduction, candidates and index assignment against cctbx's and dials' own
+results. Those values are in `tests/stills/real_stills.hh`,
+`tests/stills/real_refine.hh`, `tests/stills/real_outliers.hh` and
+`tests/stills/real_candidates.hh`, which are generated.
 
 ## Building
 

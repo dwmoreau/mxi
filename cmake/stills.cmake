@@ -16,6 +16,8 @@ endif()
 
 add_library(mxi_stills STATIC
   src/stills/build_info.cc
+  src/stills/candidates.cc
+  src/stills/cell.cc
   src/stills/crystal.cc
   src/stills/geometry.cc
   src/stills/index.cc
@@ -23,6 +25,7 @@ add_library(mxi_stills STATIC
   src/stills/nave.cc
   src/stills/outliers.cc
   src/stills/predict.cc
+  src/stills/reduction.cc
   src/stills/refine.cc
 )
 target_link_libraries(mxi_stills PUBLIC mxi)
@@ -36,6 +39,7 @@ target_compile_options(mxi_stills PRIVATE -Wall -Wextra -Wpedantic
 
 add_executable(mxi_stills_tests
   tests/main.cc
+  tests/stills/test_candidates.cc
   tests/stills/test_geometry.cc
   tests/stills/test_outliers.cc
   tests/stills/test_refine.cc

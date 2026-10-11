@@ -1,10 +1,14 @@
 """mxi stills indexing, for dials.stills_process."""
 
 from ._mxi_stills import (
+    CellError,
     Detector,
     GeometryError,
     IndexResult,
+    NiggliLimitExceeded,
     __version__,
+    assign_indices_global,
+    candidate_orientation_matrices,
     cell_d_spacings,
     cell_volume,
     compiler,
@@ -14,6 +18,7 @@ from ._mxi_stills import (
     map_spots,
     mm_to_px,
     nave_parameters,
+    niggli_reduction,
     predict_still,
     refine_still,
     sauter_poon,
@@ -21,10 +26,14 @@ from ._mxi_stills import (
 )
 
 __all__ = [
+    "CellError",
     "Detector",
     "GeometryError",
     "IndexResult",
+    "NiggliLimitExceeded",
     "__version__",
+    "assign_indices_global",
+    "candidate_orientation_matrices",
     "cell_d_spacings",
     "cell_volume",
     "compiler",
@@ -34,6 +43,7 @@ __all__ = [
     "map_spots",
     "mm_to_px",
     "nave_parameters",
+    "niggli_reduction",
     "predict_still",
     "refine_still",
     "sauter_poon",

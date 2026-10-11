@@ -80,6 +80,30 @@ bit-identical to dials' on every reflection. The minimiser alone matches scitbx'
 iteration and call counts on the Rosenbrock function to the last bit (tests/stills). Evidence:
 `stills_process_profiling/claude/rewrite/runs/r7-outliers-nave/`.
 
+**Candidate crystal models** (`src/stills/candidates`, `reduction`, `cell`). dials'
+`candidate_orientation_matrices` (Gildea et al. 2014): triplets of the first 100 basis vectors
+in combination order, stable-sorted by i^2 + j^2 + k^2; the 20 degree tests on angle(a, b) and
+on a x b against c; b and c flipped to make the angles obtuse, all three negated for a
+left-handed triplet; dxtbx's `Crystal(a, b, c)`; Niggli reduction; dxtbx's `change_basis`; and
+the V > abc/100 cut. The Niggli reduction is cctbx's Krivy-Gruber with the epsilon comparisons
+of Grosse-Kunstleve, Sauter & Adams (2004): epsilon = V^(1/3) 1e-5 against the squared
+quantities, the same step order, the last epsilon-zero element taking the sign in A4, exact
+sign tests in A5-A7, and the 1000-step limit. The unit cell and the crystal are computed as
+cctbx's `unit_cell` and dxtbx's `Crystal` compute them, through the same cell parameters,
+metric and fractionalisation matrix.
+
+**Global index assignment** (`src/stills/candidates`). dials' `AssignIndicesGlobal` for one
+image: the strict d > d_min cut on unindexed rows, h = A^-1 rlp rounded half away from zero,
+the first crystal with the smallest squared distance to its integer, the 0.3 tolerance, (0, 0, 0)
+refused, and of rows given the same h on the same crystal the nearer kept, ties to the earlier
+row (Gildea et al. 2014, section 3.1). The rotation-angle test between duplicates never applies
+to a still and is not implemented.
+
+On every candidate search and index assignment dials makes on the R3 corpus (491 searches, 1,423
+assignments), replayed from their captured inputs: the 547,597 candidate models are the same,
+in the same order, with A and the cell parameters bit-identical, and every miller index and
+crystal id is the same. Evidence: `stills_process_profiling/claude/rewrite/runs/r8a-candidates/`.
+
 Not yet departures, but named as candidates:
 - **The rotation-axis derivative.** dials' `drde` moves the unit axis e1 along the part of
   dq0 x s0 perpendicular to it; the derivative of e1 = normalise(q0 x s0) divides that by
@@ -105,4 +129,5 @@ Not yet departures, but named as candidates:
   limit are empirical, and a replacement is to be scored by merged statistics, not by agreement
   with Nave.
 - **Selling reduction** in place of Niggli reduction, if a profile shows that reduction costs
-  time.
+  time. Measured so far (R8a replay): the C++ makes a search's whole candidate list, reductions
+  included, in 0.14-0.16 of the time dials takes.
