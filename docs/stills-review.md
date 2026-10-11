@@ -56,7 +56,7 @@ Not yet departures, but named as candidates:
   |q0 x s0|. Against a central difference of the whole prediction, dials' form is off by up to
   4e-4 of the orientation columns, the analytic form by under 1e-8 (tests/stills). With
   `axis_derivative = analytic` the replay meets the 1e-4 degree tolerance on 97.6 % of runs
-  (5,059 of 5,186), and every miss but the two in row 1 is in the flat valley; the C++ ends at a
+  (5,060 of 5,186), and every miss but the two in row 1 is in the flat valley; the C++ ends at a
   lower objective than dials on 71-85 % of runs per dataset. The default stays `dials`.
  replacing Nave's mosaicity with a stills
 partiality model, and replacing Niggli reduction with Selling reduction if a profile shows that
