@@ -16,12 +16,26 @@ endif()
 
 add_library(mxi_stills STATIC
   src/stills/build_info.cc
+  src/stills/geometry.cc
+  src/stills/index.cc
 )
 target_link_libraries(mxi_stills PUBLIC mxi)
 target_compile_definitions(mxi_stills PRIVATE
   MXI_STILLS_VERSION="${PROJECT_VERSION}"
   MXI_STILLS_GIT_REVISION="${MXI_STILLS_GIT_REVISION}")
-target_compile_options(mxi_stills PRIVATE -Wall -Wextra -Wpedantic)
+# dials' geometry is compiled without fused multiply-add, and matching it to
+# the last bit needs the same.
+target_compile_options(mxi_stills PRIVATE -Wall -Wextra -Wpedantic
+  -ffp-contract=off)
+
+add_executable(mxi_stills_tests
+  tests/main.cc
+  tests/stills/test_geometry.cc
+)
+target_include_directories(mxi_stills_tests PRIVATE tests)
+target_link_libraries(mxi_stills_tests PRIVATE mxi_stills)
+target_compile_options(mxi_stills_tests PRIVATE -Wall -Wextra)
+add_test(NAME mxi_stills_tests COMMAND mxi_stills_tests)
 
 if(MXI_PYTHON)
   find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)

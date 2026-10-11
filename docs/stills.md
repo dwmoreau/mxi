@@ -10,7 +10,26 @@ its own indexing step, which covers:
 The code is C++, in a library of its own (`src/stills/`) built over the mxi
 library. The module wraps it with pybind11 (`bindings/`).
 
-So far it only reports which build it is. The indexer itself comes next.
+## What it does so far
+
+- **The frame model** (`src/stills/geometry.hh`). A multi-panel detector, with
+  each panel's laboratory-frame vectors, pixel size and parallax coefficients.
+  It is built once per process and kept. `map_spots` takes a still's spot
+  centroids to millimetres, s1 and reciprocal lattice points, with dials'
+  arithmetic in dials' order. The corpus check finds it bit-identical to dials
+  on every spot.
+- **The entry point** (`src/stills/index.hh`). `index_still` maps the spots and
+  returns "not indexed", because there is no search yet.
+- **The Python side** (`bindings/mxi_stills/dxtbx_adapter.py`). It builds the
+  arrays from live dxtbx models and keeps the C++ detector between stills. Panel
+  vectors come from the live panel, never from an `.expt`, which stores them in
+  the panel's local frame. Parallax coefficients come from the panel's px/mm
+  strategy.
+- **In dials.stills_process**, `indexing.stills.backend=mxi` selects it.
+
+The tests in `tests/stills/` (`mxi_stills_tests`) check the geometry against
+dials' own values for real spots on detectors of 256, 32, 8 and 1 panels.
+Those values are in `tests/stills/real_stills.hh`, which is generated.
 
 ## Building
 
