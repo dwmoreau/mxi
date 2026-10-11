@@ -32,6 +32,9 @@ library. The module wraps it with pybind11 (`bindings/`).
   Rayleigh fit of their distances from prediction, and `nave_parameters` fits a
   crystal's mosaicity and domain size to its Delta-Psi and returns the
   reflections inside the fitted band, as dials' stills indexer does both.
+  By default its likelihood does not overflow where dials' raises "Model has
+  diverged" (`NaveOptions::safe_likelihood`, ledger row 4); off, the fit is
+  dials' to the last bit.
   `lbfgs::run` is scitbx's L-BFGS minimiser, which both fits use.
   `StillsPanel::mm_to_px` is dxtbx's millimetre-to-pixel conversion with the
   parallax correction.

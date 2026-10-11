@@ -497,7 +497,7 @@ PYBIND11_MODULE(_mxi_stills, m) {
       py::arg("delpsi"), py::arg("d"), py::arg("two_theta"), py::arg("volume"),
       py::arg("wavelength"), py::arg("ewald_proximal_volume_max") = 0.0025,
       py::arg("resolution_cutoff") = 2.0, py::arg("expansion") = 1.4,
-      py::arg("safe_likelihood") = false,
+      py::arg("safe_likelihood") = true,
       "dials' Nave mosaicity and domain-size fit of a crystal's Delta-Psi "
       "(radians) against d (A) and 2-theta (degrees), with its acceptance "
       "flags and Ewald proximal volume test.");

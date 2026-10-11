@@ -163,9 +163,11 @@ TEST(stills_sauter_poon_rejects_a_far_spot) {
 }
 
 TEST(stills_nave_matches_dials) {
+  NaveOptions dials;
+  dials.safe_likelihood = false;
   for (const auto &c : real_outliers::nave_cases()) {
-    const NaveResult r =
-        nave_parameters(c.delpsi, c.d, c.two_theta, c.volume, c.wavelength);
+    const NaveResult r = nave_parameters(c.delpsi, c.d, c.two_theta, c.volume,
+                                         c.wavelength, dials);
     check::is_true(std::string(to_string(r.status)) == c.outcome,
                    c.name + ": outcome " + to_string(r.status));
     check::is_true(r.eta_seed == c.eta_seed, c.name + ": seed eta");
@@ -200,15 +202,15 @@ TEST(stills_nave_safe_likelihood_recovers_an_overflowing_fit) {
   const double volume = 0x1.d0b0c773f0c25p+17;
   const double wavelength = 0x1.6dad7518b0d0fp+0;
 
+  NaveOptions dials;
+  dials.safe_likelihood = false;
   const NaveResult plain =
-      nave_parameters(delpsi, d, two_theta, volume, wavelength);
+      nave_parameters(delpsi, d, two_theta, volume, wavelength, dials);
   check::is_true(plain.status == NaveStatus::diverged,
                  std::string("plain: ") + to_string(plain.status));
 
-  NaveOptions options;
-  options.safe_likelihood = true;
   const NaveResult safe =
-      nave_parameters(delpsi, d, two_theta, volume, wavelength, options);
+      nave_parameters(delpsi, d, two_theta, volume, wavelength);
   check::is_true(safe.status == NaveStatus::ok,
                  std::string("safe: ") + to_string(safe.status));
   check::is_true(safe.alpha == 0x1.1527ecaa505dcp-15, "alpha");
@@ -222,10 +224,8 @@ TEST(stills_nave_safe_likelihood_leaves_a_good_fit_alone) {
   for (const auto &c : real_outliers::nave_cases()) {
     if (c.accepted.empty())
       continue;
-    NaveOptions options;
-    options.safe_likelihood = true;
-    const NaveResult r = nave_parameters(c.delpsi, c.d, c.two_theta, c.volume,
-                                         c.wavelength, options);
+    const NaveResult r =
+        nave_parameters(c.delpsi, c.d, c.two_theta, c.volume, c.wavelength);
     check::is_true(r.alpha == c.alpha && r.eta == c.eta, c.name);
   }
 }
