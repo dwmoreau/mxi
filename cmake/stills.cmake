@@ -16,8 +16,11 @@ endif()
 
 add_library(mxi_stills STATIC
   src/stills/build_info.cc
+  src/stills/crystal.cc
   src/stills/geometry.cc
   src/stills/index.cc
+  src/stills/predict.cc
+  src/stills/refine.cc
 )
 target_link_libraries(mxi_stills PUBLIC mxi)
 target_compile_definitions(mxi_stills PRIVATE
@@ -31,6 +34,7 @@ target_compile_options(mxi_stills PRIVATE -Wall -Wextra -Wpedantic
 add_executable(mxi_stills_tests
   tests/main.cc
   tests/stills/test_geometry.cc
+  tests/stills/test_refine.cc
 )
 target_include_directories(mxi_stills_tests PRIVATE tests)
 target_link_libraries(mxi_stills_tests PRIVATE mxi_stills)

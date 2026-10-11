@@ -8,7 +8,10 @@ from ._mxi_stills import (
     compiler,
     git_revision,
     index_still,
+    linearise_still,
     map_spots,
+    predict_still,
+    refine_still,
 )
 
 __all__ = [
@@ -19,5 +22,8 @@ __all__ = [
     "compiler",
     "git_revision",
     "index_still",
+    "linearise_still",
     "map_spots",
+    "predict_still",
+    "refine_still",
 ]

@@ -3,13 +3,16 @@
 
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 
 #include "stills/build_info.hh"
 #include "stills/geometry.hh"
 #include "stills/index.hh"
+#include "stills/refine.hh"
 
 namespace py = pybind11;
 using namespace mxi::stills;
@@ -111,6 +114,114 @@ Array to_array(const std::vector<double> &x, const std::vector<double> &y) {
   return a;
 }
 
+mxi::Mat3 mat3(const Array &a, const char *name) {
+  require_shape(a, 3, 3, name);
+  mxi::Mat3 m;
+  for (int i = 0; i < 3; ++i)
+    for (int j = 0; j < 3; ++j)
+      m(i, j) = a.at(i, j);
+  return m;
+}
+
+Array to_array(const mxi::Mat3 &m) {
+  Array a({py::ssize_t{3}, py::ssize_t{3}});
+  auto r = a.mutable_unchecked<2>();
+  for (py::ssize_t i = 0; i < 3; ++i)
+    for (py::ssize_t j = 0; j < 3; ++j)
+      r(i, j) = m(static_cast<std::size_t>(i), static_cast<std::size_t>(j));
+  return a;
+}
+
+using FlagArray =
+    py::array_t<std::uint64_t, py::array::c_style | py::array::forcecast>;
+
+// Indexed spots from the reflection table's miller_index, panel,
+// xyzobs.mm.value, xyzobs.mm.variance and flags columns.
+IndexedSpots make_indexed(const IndexArray &miller, const IndexArray &panel,
+                          const Array &xyz_mm, const Array &var_mm,
+                          const FlagArray &flags) {
+  const py::ssize_t n = panel.ndim() == 1 ? panel.shape(0) : -1;
+  require_shape(miller, n, 3, "miller_index");
+  require_shape(panel, n, 0, "panel");
+  require_shape(xyz_mm, n, 3, "xyzobs.mm.value");
+  require_shape(var_mm, n, 3, "xyzobs.mm.variance");
+  require_shape(flags, n, 0, "flags");
+  IndexedSpots s;
+  const auto k = static_cast<std::size_t>(n);
+  s.miller.resize(k);
+  s.panel.assign(panel.data(), panel.data() + n);
+  s.flags.assign(flags.data(), flags.data() + n);
+  s.x_mm.resize(k);
+  s.y_mm.resize(k);
+  s.var_x_mm.resize(k);
+  s.var_y_mm.resize(k);
+  for (py::ssize_t i = 0; i < n; ++i) {
+    const auto j = static_cast<std::size_t>(i);
+    for (py::ssize_t c = 0; c < 3; ++c)
+      s.miller[j][static_cast<std::size_t>(c)] =
+          static_cast<int>(miller.at(i, c));
+    s.x_mm[j] = xyz_mm.at(i, 0);
+    s.y_mm[j] = xyz_mm.at(i, 1);
+    s.var_x_mm[j] = var_mm.at(i, 0);
+    s.var_y_mm[j] = var_mm.at(i, 1);
+  }
+  return s;
+}
+
+AxisDerivative axis_derivative(const std::string &name) {
+  if (name == "dials")
+    return AxisDerivative::dials;
+  if (name == "dials_limit")
+    return AxisDerivative::dials_limit;
+  if (name == "analytic")
+    return AxisDerivative::analytic;
+  throw py::value_error(
+      "axis_derivative: expected 'dials', 'dials_limit' or 'analytic'");
+}
+
+Array to_array(const std::vector<double> &v, py::ssize_t cols) {
+  const py::ssize_t rows = cols ? static_cast<py::ssize_t>(v.size()) / cols : 0;
+  Array a({rows, cols});
+  std::copy(v.begin(), v.end(), a.mutable_data());
+  return a;
+}
+
+py::dict to_dict(const RefineResult &r) {
+  py::dict out;
+  out["status"] = std::string(to_string(r.status));
+  out["failed"] = failed(r.status);
+  out["message"] = r.message;
+  out["U"] = to_array(r.U);
+  out["B"] = to_array(r.B);
+  out["parameter_names"] = r.parameter_names;
+  out["n_iterations"] = r.n_iterations;
+  out["n_used"] = r.n_used;
+  out["rmsd"] = py::make_tuple(r.rmsd[0], r.rmsd[1], r.rmsd[2]);
+  py::list journal;
+  for (const JournalRow &row : r.journal) {
+    py::dict d;
+    d["rmsd"] = py::make_tuple(row.rmsd[0], row.rmsd[1], row.rmsd[2]);
+    d["objective"] = row.objective;
+    d["mu"] = row.mu;
+    d["nu"] = row.nu;
+    d["parameters"] = row.parameters;
+    journal.append(d);
+  }
+  out["journal"] = journal;
+  IndexArray used(static_cast<py::ssize_t>(r.used.size()));
+  for (std::size_t i = 0; i < r.used.size(); ++i)
+    used.mutable_at(static_cast<py::ssize_t>(i)) =
+        static_cast<std::int64_t>(r.used[i]);
+  out["used"] = used;
+  out["xyzcal.mm"] = to_array(r.x_calc, r.y_calc);
+  Array delpsi(static_cast<py::ssize_t>(r.delpsi.size()));
+  for (std::size_t i = 0; i < r.delpsi.size(); ++i)
+    delpsi.mutable_at(static_cast<py::ssize_t>(i)) = r.delpsi[i];
+  out["delpsical.rad"] = delpsi;
+  out["s1"] = to_array(r.s1);
+  return out;
+}
+
 } // namespace
 
 PYBIND11_MODULE(_mxi_stills, m) {
@@ -166,4 +277,99 @@ PYBIND11_MODULE(_mxi_stills, m) {
       },
       py::arg("detector"), py::arg("s0"), py::arg("wavelength"),
       py::arg("panel"), py::arg("xyz_px"), py::arg("var_px"));
+
+  m.def(
+      "refine_still",
+      [](const StillsDetector &detector, const Array &s0, const Array &U,
+         const Array &B, const std::string &hall, const IndexArray &miller,
+         const IndexArray &panel, const Array &xyz_mm, const Array &var_mm,
+         const FlagArray &flags, const std::string &axis, double rmsd_tolerance,
+         int max_iterations) {
+        RefineOptions options;
+        options.axis_derivative = axis_derivative(axis);
+        options.rmsd_tolerance = rmsd_tolerance;
+        options.max_iterations = max_iterations;
+        const IndexedSpots spots =
+            make_indexed(miller, panel, xyz_mm, var_mm, flags);
+        RefineResult r;
+        {
+          py::gil_scoped_release release;
+          r = refine_crystal(detector, vec3(s0, "s0"), mat3(U, "U"),
+                             mat3(B, "B"), hall, spots, options);
+        }
+        return to_dict(r);
+      },
+      py::arg("detector"), py::arg("s0"), py::arg("U"), py::arg("B"),
+      py::arg("hall"), py::arg("miller_index"), py::arg("panel"),
+      py::arg("xyz_mm"), py::arg("var_mm"), py::arg("flags"),
+      py::arg("axis_derivative") = "dials", py::arg("rmsd_tolerance") = 1e-4,
+      py::arg("max_iterations") = 100,
+      "Refine a still's crystal (U, B; the cell constrained by the space "
+      "group named by its Hall symbol) against its indexed spots, as dials' "
+      "stills refinement does, with the beam and detector fixed.");
+
+  m.def(
+      "linearise_still",
+      [](const StillsDetector &detector, const Array &s0, const Array &U,
+         const Array &B, const std::string &hall, const IndexArray &miller,
+         const IndexArray &panel, const Array &xyz_mm, const Array &var_mm,
+         const FlagArray &flags, const std::string &axis) {
+        RefineOptions options;
+        options.axis_derivative = axis_derivative(axis);
+        const Linearisation l = linearise_crystal(
+            detector, vec3(s0, "s0"), mat3(U, "U"), mat3(B, "B"), hall,
+            make_indexed(miller, panel, xyz_mm, var_mm, flags), options);
+        py::dict out;
+        out["status"] = std::string(to_string(l.status));
+        out["message"] = l.message;
+        out["parameter_names"] = l.parameter_names;
+        out["parameters"] = l.parameters;
+        out["used"] = l.used;
+        const auto n_param = static_cast<py::ssize_t>(l.parameters.size());
+        out["residual"] = to_array(l.residual, 3);
+        out["weight"] = to_array(l.weight, 3);
+        out["jacobian"] = to_array(l.jacobian, n_param);
+        return out;
+      },
+      py::arg("detector"), py::arg("s0"), py::arg("U"), py::arg("B"),
+      py::arg("hall"), py::arg("miller_index"), py::arg("panel"),
+      py::arg("xyz_mm"), py::arg("var_mm"), py::arg("flags"),
+      py::arg("axis_derivative") = "dials",
+      "The residuals, weights and Jacobian (rows X, Y, Delta-Psi per used "
+      "spot; one column per parameter) at the starting model.");
+
+  m.def(
+      "predict_still",
+      [](const StillsDetector &detector, const Array &s0, const Array &U,
+         const Array &B, const IndexArray &miller, const IndexArray &panel) {
+        const py::ssize_t n = panel.ndim() == 1 ? panel.shape(0) : -1;
+        require_shape(miller, n, 3, "miller_index");
+        require_shape(panel, n, 0, "panel");
+        std::vector<std::array<int, 3>> h(static_cast<std::size_t>(n));
+        for (py::ssize_t i = 0; i < n; ++i)
+          for (py::ssize_t c = 0; c < 3; ++c)
+            h[static_cast<std::size_t>(i)][static_cast<std::size_t>(c)] =
+                static_cast<int>(miller.at(i, c));
+        const std::vector<std::int64_t> p(panel.data(), panel.data() + n);
+        const Predictions r = predict_spots(detector, vec3(s0, "s0"),
+                                            mat3(U, "U"), mat3(B, "B"), h, p);
+        py::dict out;
+        IndexArray ok(n);
+        Array delpsi(n);
+        for (py::ssize_t i = 0; i < n; ++i) {
+          const auto j = static_cast<std::size_t>(i);
+          ok.mutable_at(i) = r.status[j] == PredictStatus::ok ? 1 : 0;
+          delpsi.mutable_at(i) = r.delpsi[j];
+        }
+        out["predicted"] = ok;
+        out["xyzcal.mm"] = to_array(r.x_mm, r.y_mm);
+        out["delpsical.rad"] = delpsi;
+        out["s1"] = to_array(r.s1);
+        return out;
+      },
+      py::arg("detector"), py::arg("s0"), py::arg("U"), py::arg("B"),
+      py::arg("miller_index"), py::arg("panel"),
+      "Stills predictions (X, Y in mm, Delta-Psi, s1) of each reflection for "
+      "the crystal A = U B; predicted is 0 where a reflection cannot be "
+      "predicted or misses its panel's plane.");
 }

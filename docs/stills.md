@@ -18,6 +18,15 @@ library. The module wraps it with pybind11 (`bindings/`).
   centroids to millimetres, s1 and reciprocal lattice points, with dials'
   arithmetic in dials' order. The corpus check finds it bit-identical to dials
   on every spot.
+- **Stills refinement** (`src/stills/refine.hh`, with `crystal.hh` and
+  `predict.hh`). `refine_crystal` refines one still's crystal, its orientation
+  and its cell constrained by the space group, against its indexed spots, with
+  the beam and detector fixed. Prediction, target, weights and minimiser are
+  dials' stills refinement (`docs/stills-review.md` lists where they differ).
+  `predict_spots` and `linearise_crystal` expose the prediction and the
+  least-squares problem at the starting model. `AxisDerivative` chooses the
+  form of the rotation-axis term of the Jacobian: `dials` (the default),
+  `dials_limit`, or `analytic`.
 - **The entry point** (`src/stills/index.hh`). `index_still` maps the spots and
   returns "not indexed", because there is no search yet.
 - **The Python side** (`bindings/mxi_stills/dxtbx_adapter.py`). It builds the
@@ -28,8 +37,10 @@ library. The module wraps it with pybind11 (`bindings/`).
 - **In dials.stills_process**, `indexing.stills.backend=mxi` selects it.
 
 The tests in `tests/stills/` (`mxi_stills_tests`) check the geometry against
-dials' own values for real spots on detectors of 256, 32, 8 and 1 panels.
-Those values are in `tests/stills/real_stills.hh`, which is generated.
+dials' own values for real spots on detectors of 256, 32, 8 and 1 panels, and
+the refinement against dials' own runs on real stills in five space groups.
+Those values are in `tests/stills/real_stills.hh` and
+`tests/stills/real_refine.hh`, which are generated.
 
 ## Building
 
