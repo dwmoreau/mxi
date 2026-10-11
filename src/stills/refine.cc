@@ -205,6 +205,19 @@ private:
   Mat3 U_, B_;
 };
 
+// The RMSDs and predictions of the model the refinement ends on: the last one
+// evaluated.
+void record_predictions(const Problem &problem, RefineResult *result) {
+  result->rmsd = problem.rmsd();
+  result->used = problem.used();
+  for (const Ray &ray : problem.rays()) {
+    result->x_calc.push_back(ray.x_mm);
+    result->y_calc.push_back(ray.y_mm);
+    result->delpsi.push_back(ray.delpsi);
+    result->s1.push_back(ray.s1);
+  }
+}
+
 std::vector<double> free_values(const std::vector<double> &x,
                                 const std::vector<int> &free) {
   std::vector<double> out(free.size());
@@ -410,6 +423,7 @@ RefineResult refine_crystal(const StillsDetector &detector, const Vec3 &s0,
       result.message = to_string(result.status);
       result.U = problem.U();
       result.B = problem.B();
+      record_predictions(problem, &result);
       return result;
     }
 
@@ -494,15 +508,7 @@ RefineResult refine_crystal(const StillsDetector &detector, const Vec3 &s0,
     result.n_iterations = n_iterations;
     result.U = end_U;
     result.B = end_B;
-    // The final predictions are of the model the refinement ends on.
-    result.rmsd = problem.rmsd();
-    result.used = problem.used();
-    for (const Ray &ray : problem.rays()) {
-      result.x_calc.push_back(ray.x_mm);
-      result.y_calc.push_back(ray.y_mm);
-      result.delpsi.push_back(ray.delpsi);
-      result.s1.push_back(ray.s1);
-    }
+    record_predictions(problem, &result);
   } catch (const Failure &failure) {
     result.status = failure.status;
     result.message = failure.message;
