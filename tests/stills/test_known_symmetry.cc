@@ -48,8 +48,9 @@ TEST(stills_space_group_type_matches_cctbx) {
 }
 
 TEST(stills_cached_space_group_results_match_cctbx) {
-  // Each case twice: the second pass reads change_basis and the type from the
-  // per-thread caches, and must still give cctbx's answers and the same group.
+  // Each case twice: the second pass reads change_basis, the type and
+  // find_affine from the per-thread caches, and must still give cctbx's answers
+  // and the same group and matrices.
   for (int pass = 0; pass < 2; ++pass)
     for (const auto &c : real_symmetry::type_cases) {
       const std::string name = std::to_string(c.number) + " (" + c.setting +
@@ -65,6 +66,15 @@ TEST(stills_cached_space_group_results_match_cctbx) {
       check::equal(t.number(), c.expected_number, name + ": number");
       same_rt(t.cb_op().c(), c.expected_c, name + ": cb_op c");
       same_rt(t.cb_op().c_inv(), c.expected_c_inv, name + ": cb_op c_inv");
+      if (c.expected_number >= 3 && c.expected_number <= 15) {
+        sg::Key affine_first, affine_again;
+        for (const sg::RtMx &m : sg::find_affine(g))
+          sg::append_key(affine_first, m);
+        for (const sg::RtMx &m : sg::find_affine(g))
+          sg::append_key(affine_again, m);
+        check::is_true(!affine_first.empty() && affine_first == affine_again,
+                       name + ": find_affine");
+      }
     }
 }
 

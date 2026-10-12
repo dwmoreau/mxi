@@ -442,6 +442,7 @@ std::string bravais_symbol(const SpaceGroup &g);
 // cctbx's find_affine(group, range=2): the integer change-of-basis matrices
 // with elements in [-range, range] and determinant 1 that map the group onto
 // itself, in cctbx's order. Only the general (n_smx > 1) algorithm is here.
+// The result is cached per thread (see Key).
 std::vector<RtMx> find_affine(const SpaceGroup &group, int range = 2);
 
 // cctbx's reference tables (sgtbx_tables.cc).

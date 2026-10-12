@@ -2119,7 +2119,9 @@ std::string bravais_symbol(const SpaceGroup &g) {
   return out;
 }
 
-std::vector<RtMx> find_affine(const SpaceGroup &group, int range) {
+namespace {
+
+std::vector<RtMx> compute_find_affine(const SpaceGroup &group, int range) {
   check(group.n_smx() > 1, "find_affine: the P1 algorithm is not ported");
   SpaceGroup tidy_group = group;
   tidy_group.make_tidy();
@@ -2181,6 +2183,21 @@ std::vector<RtMx> find_affine(const SpaceGroup &group, int range) {
       loop[k] = -range;
     }
   }
+}
+
+} // namespace
+
+std::vector<RtMx> find_affine(const SpaceGroup &group, int range) {
+  thread_local std::unordered_map<Key, std::vector<RtMx>, KeyHash> cache;
+  Key key{range};
+  group.append_key(key);
+  if (const auto it = cache.find(key); it != cache.end())
+    return it->second;
+  std::vector<RtMx> result = compute_find_affine(group, range);
+  if (cache.size() >= kCacheLimit)
+    cache.clear();
+  cache.emplace(std::move(key), result);
+  return result;
 }
 
 } // namespace mxi::stills::sgtbx
