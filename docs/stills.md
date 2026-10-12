@@ -45,6 +45,16 @@ library. The module wraps it with pybind11 (`bindings/`).
   a still's spots against one or more crystals as dials'
   `AssignIndicesGlobal` does. `UnitCell` and `CrystalModel` compute a cell and
   a crystal as cctbx's `unit_cell` and dxtbx's `Crystal` do.
+- **Known symmetry** (`src/stills/known_symmetry.hh`, with `sgtbx.hh`).
+  `KnownSymmetry` and `filter_known_symmetry` keep the candidates dials keeps
+  when the space group and cell are known, through `find_matching_symmetry`:
+  the minimum cell, the lattice group from the 81 two-folds, its subgroups of
+  the target Bravais type, their reference settings and best cells, and the
+  obliquity of each. `sgtbx.hh` is the part of cctbx's sgtbx this needs:
+  rational symmetry operations, space groups kept in cctbx's operation order,
+  the Hall symbol parser, and the space-group type with its change of basis to
+  the reference setting. Its reference tables (`sgtbx_tables.cc`) are copied
+  from cctbx by a script and are not edited by hand.
 - **The entry point** (`src/stills/index.hh`). `index_still` maps the spots and
   returns "not indexed", because there is no search yet.
 - **The Python side** (`bindings/mxi_stills/dxtbx_adapter.py`). It builds the
@@ -58,10 +68,11 @@ The tests in `tests/stills/` (`mxi_stills_tests`) check the geometry against
 dials' own values for real spots on detectors of 256, 32, 8 and 1 panels, and
 the refinement against dials' own runs on real stills in five space groups,
 the outlier rejection and Nave fit against dials' own calls, and the cell
-reduction, candidates and index assignment against cctbx's and dials' own
-results. Those values are in `tests/stills/real_stills.hh`,
-`tests/stills/real_refine.hh`, `tests/stills/real_outliers.hh` and
-`tests/stills/real_candidates.hh`, which are generated.
+reduction, candidates and index assignment, the space-group types and the
+known-symmetry filter against cctbx's and dials' own results. Those values are
+in `tests/stills/real_stills.hh`, `tests/stills/real_refine.hh`,
+`tests/stills/real_outliers.hh`, `tests/stills/real_candidates.hh` and
+`tests/stills/real_symmetry.hh`, which are generated.
 
 ## Building
 

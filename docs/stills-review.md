@@ -104,6 +104,30 @@ assignments), replayed from their captured inputs: the 547,597 candidate models 
 in the same order, with A and the cell parameters bit-identical, and every miller index and
 crystal id is the same. Evidence: `stills_process_profiling/claude/rewrite/runs/r8a-candidates/`.
 
+**Known symmetry** (`src/stills/known_symmetry`, `sgtbx`, `sgtbx_type`). dials'
+`filter_known_symmetry` and `find_matching_symmetry`, and the cctbx under them: the volume
+window; the fast minimum reduction (Grosse-Kunstleve, Sauter & Adams 2004); the lattice group
+grown from the 81 two-folds of a reduced cell sorted by Le Page's obliquity (Le Page 1982;
+Lebedev, Vagin & Murshudov 2006), skipping any two-fold whose group exceeds 5 degrees;
+`subgroups`; the space-group type and the change of basis to the reference setting
+(Grosse-Kunstleve 1999, section 5, then cctbx's search over the affine normalizer for the
+operator its comparator ranks first, which the paper does not describe); dials' metric
+supergroup; `crystal.symmetry`, whose cell is averaged over the group's operations at every
+change of basis; `find_best_cell`; and `find_max_delta`. The floating results depend on the
+order in which a group holds its operations, so expansion, `make_tidy` and change of basis
+follow cctbx statement for statement, including that `space_group_info(group=g)` tidies `g`.
+The subgroups of a lattice group are memoised as dials memoises them. The A1983 standard
+setting `find_best_cell` builds is taken from the reference table; the five numbers where they
+differ (48, 50, 59, 68, 70) are centric and cannot reach it, and are refused.
+
+Against cctbx, every reference group in 13 settings: the operations in stored and tidied order,
+the type, the change of basis raw and tidied, the metric supergroup and the Bravais symbol are
+identical, and the settings cctbx refuses are refused (14,950 checks). On every model the R3
+corpus put through `filter_known_symmetry` (393,485), replayed: the same outcome and reason, and
+where a best subgroup exists its obliquity and best cell, bit-identical; the targets' cell,
+volume window and Bravais type are identical. Evidence:
+`stills_process_profiling/claude/rewrite/runs/r8a-symmetry/`.
+
 Not yet departures, but named as candidates:
 - **The rotation-axis derivative.** dials' `drde` moves the unit axis e1 along the part of
   dq0 x s0 perpendicular to it; the derivative of e1 = normalise(q0 x s0) divides that by

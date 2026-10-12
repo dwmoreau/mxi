@@ -266,6 +266,8 @@ std::vector<std::array<int, 3>> miller_of(const IndexArray &miller) {
 
 } // namespace
 
+void bind_known_symmetry(py::module_ &m);
+
 PYBIND11_MODULE(_mxi_stills, m) {
   m.doc() = "mxi stills indexing for dials.stills_process";
 
@@ -623,4 +625,6 @@ PYBIND11_MODULE(_mxi_stills, m) {
       py::arg("d_min") = py::none(), py::arg("tolerance") = 0.3,
       "dials' AssignIndicesGlobal on one image: miller_index and the crystal "
       "of every row, (0, 0, 0) and -1 where unassigned.");
+
+  bind_known_symmetry(m);
 }
