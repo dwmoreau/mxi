@@ -47,6 +47,27 @@ TEST(stills_space_group_type_matches_cctbx) {
   }
 }
 
+TEST(stills_cached_space_group_results_match_cctbx) {
+  // Each case twice: the second pass reads change_basis and the type from the
+  // per-thread caches, and must still give cctbx's answers and the same group.
+  for (int pass = 0; pass < 2; ++pass)
+    for (const auto &c : real_symmetry::type_cases) {
+      const std::string name = std::to_string(c.number) + " (" + c.setting +
+                               "), pass " + std::to_string(pass);
+      const sg::SpaceGroup h = sg::SpaceGroup::from_hall(c.hall);
+      const sg::ChangeOfBasisOp cb(rt(c.cb_c), rt(c.cb_c_inv));
+      const sg::SpaceGroup g = h.change_basis(cb);
+      sg::Key first, again;
+      g.append_key(first);
+      h.change_basis(cb).append_key(again);
+      check::is_true(first == again, name + ": change_basis");
+      const sg::SpaceGroupType t(g);
+      check::equal(t.number(), c.expected_number, name + ": number");
+      same_rt(t.cb_op().c(), c.expected_c, name + ": cb_op c");
+      same_rt(t.cb_op().c_inv(), c.expected_c_inv, name + ": cb_op c_inv");
+    }
+}
+
 TEST(stills_reference_symbols_parse) {
   for (int n = 1; n <= 230; ++n) {
     const sg::SpaceGroup g =

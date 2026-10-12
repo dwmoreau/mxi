@@ -18,6 +18,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -327,6 +328,20 @@ inline constexpr MatrixGroup code_m3bm {CrystalSystem::cubic,        0, 0, 41};
 // clang-format on
 } // namespace matrix_group
 
+// The integers that make up a value, in order. Two values with equal keys
+// give every computation here the same result, so a key can index a cache of
+// those results.
+using Key = std::vector<int>;
+// A cache that reaches this many entries is emptied.
+inline constexpr std::size_t kCacheLimit = 4096;
+struct KeyHash {
+  std::size_t operator()(const Key &key) const noexcept;
+};
+void append_key(Key &key, const RotMx &r);
+void append_key(Key &key, const TrVec &t);
+void append_key(Key &key, const RtMx &s);
+void append_key(Key &key, const ChangeOfBasisOp &cb_op);
+
 class SpaceGroup {
 public:
   explicit SpaceGroup(bool no_expand = false, int t_den = sg_t_den);
@@ -365,7 +380,10 @@ public:
   SpaceGroup &make_tidy();
   bool operator==(const SpaceGroup &o) const;
   bool operator!=(const SpaceGroup &o) const { return !(*this == o); }
+  // The result is cached per thread (see Key).
   SpaceGroup change_basis(const ChangeOfBasisOp &cb_op) const;
+  // Every member, in order.
+  void append_key(Key &key) const;
   SpaceGroup build_derived_group(bool discard_z, bool add_inv) const;
   SpaceGroup build_derived_acentric_group() const;
   ChangeOfBasisOp z2p_op(int r_den = cb_r_den, int t_den = cb_t_den) const;
@@ -381,6 +399,7 @@ public:
 
 private:
   void reset(int t_den);
+  SpaceGroup compute_change_basis(const ChangeOfBasisOp &cb_op) const;
   void add_inv(const TrVec &t);
   void add_smx(const RtMx &s);
   ChangeOfBasisOp construct_z2p_op(int r_den, int t_den) const;
@@ -395,7 +414,8 @@ private:
 
 class SpaceGroupType {
 public:
-  // cctbx's space_group_type(group, tidy_cb_op, r_den, t_den).
+  // cctbx's space_group_type(group, tidy_cb_op, r_den, t_den). The number and
+  // change of basis are cached per thread (see Key).
   explicit SpaceGroupType(const SpaceGroup &group, bool tidy_cb_op = true,
                           int r_den = cb_r_den, int t_den = cb_t_den);
   int number() const { return number_; }
@@ -408,6 +428,8 @@ public:
                                                             bool l2n) const;
 
 private:
+  void determine(bool tidy_cb_op, int r_den, int t_den);
+
   SpaceGroup group_;
   int number_ = 0;
   ChangeOfBasisOp cb_op_;

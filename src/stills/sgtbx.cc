@@ -11,6 +11,7 @@
 #include <cstring>
 #include <map>
 #include <numeric>
+#include <unordered_map>
 
 namespace mxi::stills::sgtbx {
 
@@ -1191,7 +1192,68 @@ bool SpaceGroup::operator==(const SpaceGroup &rhs) const {
   return true;
 }
 
+std::size_t KeyHash::operator()(const Key &key) const noexcept {
+  std::size_t h = 14695981039346656037ull;
+  for (int v : key) {
+    h ^= static_cast<std::size_t>(static_cast<unsigned>(v));
+    h *= 1099511628211ull;
+  }
+  return h;
+}
+
+void append_key(Key &key, const RotMx &r) {
+  key.push_back(r.den());
+  for (std::size_t i = 0; i < 9; ++i)
+    key.push_back(r[i]);
+}
+
+void append_key(Key &key, const TrVec &t) {
+  key.push_back(t.den());
+  for (std::size_t i = 0; i < 3; ++i)
+    key.push_back(t[i]);
+}
+
+void append_key(Key &key, const RtMx &s) {
+  append_key(key, s.r());
+  append_key(key, s.t());
+}
+
+void append_key(Key &key, const ChangeOfBasisOp &cb_op) {
+  append_key(key, cb_op.c());
+  append_key(key, cb_op.c_inv());
+}
+
+void SpaceGroup::append_key(Key &key) const {
+  key.push_back(no_expand_);
+  key.push_back(static_cast<int>(n_lsl_));
+  key.push_back(static_cast<int>(n_ssl_));
+  key.push_back(static_cast<int>(f_inv_));
+  key.push_back(is_tidy_);
+  key.push_back(static_cast<int>(ltr_.size()));
+  for (const TrVec &t : ltr_.elems())
+    sgtbx::append_key(key, t);
+  sgtbx::append_key(key, inv_t_);
+  key.push_back(static_cast<int>(smx_.size()));
+  for (const RtMx &s : smx_)
+    sgtbx::append_key(key, s);
+}
+
 SpaceGroup SpaceGroup::change_basis(const ChangeOfBasisOp &cb_op) const {
+  thread_local std::unordered_map<Key, SpaceGroup, KeyHash> cache;
+  Key key;
+  append_key(key);
+  sgtbx::append_key(key, cb_op);
+  if (const auto it = cache.find(key); it != cache.end())
+    return it->second;
+  SpaceGroup result = compute_change_basis(cb_op);
+  if (cache.size() >= kCacheLimit)
+    cache.clear();
+  cache.emplace(std::move(key), result);
+  return result;
+}
+
+SpaceGroup
+SpaceGroup::compute_change_basis(const ChangeOfBasisOp &cb_op) const {
   SpaceGroup result(no_expand_, t_den());
   result.ltr_ = ltr_.change_basis(cb_op);
   if (is_centric())

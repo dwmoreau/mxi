@@ -8,6 +8,8 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <unordered_map>
+#include <utility>
 
 #include "stills/sgtbx.hh"
 
@@ -1007,6 +1009,22 @@ ChangeOfBasisOp find_best_cb_op(const SpaceGroup &given_sg,
 SpaceGroupType::SpaceGroupType(const SpaceGroup &group, bool tidy_cb_op,
                                int r_den, int t_den)
     : group_(group), number_(0), cb_op_(r_den, t_den) {
+  thread_local std::unordered_map<Key, std::pair<int, ChangeOfBasisOp>, KeyHash>
+      cache;
+  Key key{tidy_cb_op, r_den, t_den};
+  group_.append_key(key);
+  if (const auto it = cache.find(key); it != cache.end()) {
+    number_ = it->second.first;
+    cb_op_ = it->second.second;
+    return;
+  }
+  determine(tidy_cb_op, r_den, t_den);
+  if (cache.size() >= kCacheLimit)
+    cache.clear();
+  cache.emplace(std::move(key), std::make_pair(number_, cb_op_));
+}
+
+void SpaceGroupType::determine(bool tidy_cb_op, int r_den, int t_den) {
   const MatrixGroup point_group = group_.point_group_type();
   const MatrixGroup laue_group = point_group.laue_group_type();
   const CrystalSystem xtal_system = point_group.crystal_system();
