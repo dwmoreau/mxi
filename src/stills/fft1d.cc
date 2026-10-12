@@ -143,38 +143,60 @@ std::size_t primecheck(std::size_t input_m) {
 class DpsCore {
 public:
   DpsCore(const std::vector<Vec3> &xyz, double amax, bool single_precision)
-      : xyz_(xyz), amax_(amax), single_precision_(single_precision) {}
+      : n_(xyz.size()), amax_(amax), single_precision_(single_precision) {
+    x_.resize(n_);
+    y_.resize(n_);
+    z_.resize(n_);
+    for (std::size_t k = 0; k < n_; ++k) {
+      x_[k] = xyz[k][0];
+      y_[k] = xyz[k][1];
+      z_[k] = xyz[k][2];
+    }
+    projections_.resize(n_);
+  }
 
-  std::size_t size() const { return xyz_.size(); }
+  std::size_t size() const { return n_; }
 
   // Directional_FFT followed by extract_directional_properties, for every
-  // direction in dirs. Directions whose transforms have the same length are
-  // transformed kLanes at a time, one in each lane of fftpack::Lanes.
+  // direction in dirs. Each direction is projected once and its bins kept
+  // with the other pending directions of its transform length; a length's
+  // directions are transformed together, one in each lane of the lane type,
+  // as soon as there are as many as it has lanes, and the rest at the end.
   void evaluate_all(std::vector<Direction> &dirs) {
-    const std::size_t n_dirs = dirs.size();
-    extents_.resize(n_dirs);
-    for (std::size_t i = 0; i < n_dirs; ++i)
-      extents_[i] = extent(dirs[i]);
-    order_.resize(n_dirs);
-    for (std::size_t i = 0; i < n_dirs; ++i)
-      order_[i] = i;
-    std::stable_sort(order_.begin(), order_.end(),
-                     [&](std::size_t a, std::size_t b) {
-                       return extents_[a].m < extents_[b].m;
-                     });
     const std::size_t width =
         single_precision_ ? fftpack::kFloatLanes : fftpack::kLanes;
-    for (std::size_t a = 0; a < n_dirs;) {
-      const std::size_t m = extents_[order_[a]].m;
-      std::size_t b = a + 1;
-      while (b < n_dirs && b - a < width && extents_[order_[b]].m == m)
-        ++b;
-      if (single_precision_)
-        transform(dirs, &order_[a], b - a, freq_float_, scratch_float_);
-      else
-        transform(dirs, &order_[a], b - a, freq_, scratch_);
-      a = b;
+    for (Pending &g : pending_)
+      g.count = 0;
+    std::size_t recent = 0;
+    for (std::size_t i = 0; i < dirs.size(); ++i) {
+      const Extent e = extent(dirs[i]);
+      // The pending group of this length, looked for from the last one used.
+      std::size_t slot = pending_.size();
+      for (std::size_t j = 0; j < pending_.size(); ++j) {
+        const std::size_t c = (recent + j) % pending_.size();
+        if (pending_[c].m == e.m) {
+          slot = c;
+          break;
+        }
+      }
+      if (slot == pending_.size()) {
+        pending_.push_back({e.m, 0, {}, {}, {}});
+        pending_.back().bins.resize(width * n_);
+      }
+      recent = slot;
+      Pending &g = pending_[slot];
+      std::uint32_t *bins = g.bins.data() + g.count * n_;
+      for (std::size_t k = 0; k < n_; ++k)
+        bins[k] = static_cast<std::uint32_t>(static_cast<int>(
+            ((projections_[k] - e.pmin) / e.delta_p) + 0.5));
+      g.index[g.count] = i;
+      g.extent[g.count] = e;
+      if (++g.count == width)
+        flush(dirs, g);
     }
+    for (Pending &g : pending_)
+      if (g.count > 0)
+        flush(dirs, g);
   }
 
   // indexing_api's refine_direction.
@@ -213,20 +235,40 @@ private:
     std::size_t m = 0;
   };
 
-  void project(const Direction &d) {
-    const std::size_t n = xyz_.size();
-    projections_.resize(n);
-    for (std::size_t k = 0; k < n; ++k)
-      projections_[k] = xyz_[k][0] * d.dvec[0] + xyz_[k][1] * d.dvec[1] +
-                        xyz_[k][2] * d.dvec[2];
-  }
+  // The directions of one transform length waiting to be transformed: each
+  // one's index into dirs, its extent, and its bins, count of them.
+  struct Pending {
+    std::size_t m = 0;
+    std::size_t count = 0;
+    std::array<std::size_t, fftpack::kFloatLanes> index{};
+    std::array<Extent, fftpack::kFloatLanes> extent{};
+    std::vector<std::uint32_t> bins;
+  };
 
+  // The projections of every point on d, into projections_, and their range
+  // and transform length.
   Extent extent(const Direction &d) {
-    project(d);
-    const double pmin =
-        *std::min_element(projections_.begin(), projections_.end());
-    const double pmax =
-        *std::max_element(projections_.begin(), projections_.end());
+    const double d0 = d.dvec[0], d1 = d.dvec[1], d2 = d.dvec[2];
+    const double *x = x_.data(), *y = y_.data(), *z = z_.data();
+    double *p = projections_.data();
+    for (std::size_t k = 0; k < n_; ++k)
+      p[k] = x[k] * d0 + y[k] * d1 + z[k] * d2;
+    // The least and greatest projection, two lanes at a time.
+    using D2 = double __attribute__((vector_size(16)));
+    D2 lo = {p[0], p[0]}, hi = lo;
+    std::size_t k = 0;
+    for (; k + 2 <= n_; k += 2) {
+      D2 v;
+      std::memcpy(&v, p + k, sizeof v);
+      lo = (v < lo) ? v : lo;
+      hi = (v > hi) ? v : hi;
+    }
+    double pmin = lo[1] < lo[0] ? lo[1] : lo[0];
+    double pmax = hi[1] > hi[0] ? hi[1] : hi[0];
+    for (; k < n_; ++k) {
+      pmin = p[k] < pmin ? p[k] : pmin;
+      pmax = p[k] > pmax ? p[k] : pmax;
+    }
     std::size_t m =
         1 + static_cast<std::size_t>((pmax - pmin) * kGranularity * amax_);
     m = primecheck(m);
@@ -235,22 +277,27 @@ private:
     return {pmin, delta_p, m};
   }
 
-  // The histograms of up to kLanes directions of one transform length, one
-  // per lane, transformed together; each direction's peak is then found in
-  // its own lane. Unused lanes transform zeros.
+  void flush(std::vector<Direction> &dirs, Pending &g) {
+    if (single_precision_)
+      transform(dirs, g, freq_float_, scratch_float_);
+    else
+      transform(dirs, g, freq_, scratch_);
+    g.count = 0;
+  }
+
+  // The histograms of the group's directions, one per lane, transformed
+  // together; each direction's peak is then found in its own lane. Unused
+  // lanes transform zeros.
   template <class L>
-  void transform(std::vector<Direction> &dirs, const std::size_t *index,
-                 std::size_t count, std::vector<L> &freq,
-                 std::vector<L> &scratch) {
-    const std::size_t m = extents_[index[0]].m;
+  void transform(std::vector<Direction> &dirs, const Pending &g,
+                 std::vector<L> &freq, std::vector<L> &scratch) {
+    const std::size_t m = g.m, count = g.count;
     const fftpack::RealToComplex &fft = plan(m);
     freq.assign(fft.m_real(), L{});
     for (std::size_t l = 0; l < count; ++l) {
-      const Extent &e = extents_[index[l]];
-      project(dirs[index[l]]);
-      for (double p : projections_)
-        freq[static_cast<std::size_t>(
-            static_cast<int>(((p - e.pmin) / e.delta_p) + 0.5))][l] += 1;
+      const std::uint32_t *bins = g.bins.data() + l * n_;
+      for (std::size_t k = 0; k < n_; ++k)
+        freq[bins[k]][l] += 1;
     }
     scratch.resize(std::max(scratch.size(), m));
     fft.forward(freq.data(), scratch.data());
@@ -297,8 +344,8 @@ private:
       }
     }
     for (std::size_t l = 0; l < count; ++l) {
-      Direction &d = dirs[index[l]];
-      const Extent &e = extents_[index[l]];
+      Direction &d = dirs[g.index[l]];
+      const Extent &e = g.extent[l];
       d.kmax = p_kmax[l];
       d.kval = p_kval[l];
       d.m = m;
@@ -316,12 +363,12 @@ private:
     return it->second;
   }
 
-  const std::vector<Vec3> &xyz_;
+  std::size_t n_;
+  std::vector<double> x_, y_, z_;
   double amax_;
   std::map<std::size_t, fftpack::RealToComplex> plans_;
   std::vector<double> projections_;
-  std::vector<Extent> extents_;
-  std::vector<std::size_t> order_;
+  std::vector<Pending> pending_;
   bool single_precision_;
   std::vector<fftpack::Lanes> freq_, scratch_;
   std::vector<fftpack::FloatLanes> freq_float_, scratch_float_;
