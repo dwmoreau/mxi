@@ -279,9 +279,9 @@ private:
 
   void flush(std::vector<Direction> &dirs, Pending &g) {
     if (single_precision_)
-      transform(dirs, g, freq_float_, scratch_float_);
+      transform(dirs, g, freq_float_, scratch_float_, squares_float_);
     else
-      transform(dirs, g, freq_, scratch_);
+      transform(dirs, g, freq_, scratch_, squares_);
     g.count = 0;
   }
 
@@ -290,7 +290,8 @@ private:
   // lanes transform zeros.
   template <class L>
   void transform(std::vector<Direction> &dirs, const Pending &g,
-                 std::vector<L> &freq, std::vector<L> &scratch) {
+                 std::vector<L> &freq, std::vector<L> &scratch,
+                 std::vector<L> &squares) {
     const std::size_t m = g.m, count = g.count;
     const fftpack::RealToComplex &fft = plan(m);
     freq.assign(fft.m_real(), L{});
@@ -300,7 +301,10 @@ private:
         freq[bins[k]][l] += 1;
     }
     scratch.resize(std::max(scratch.size(), m));
-    fft.forward(freq.data(), scratch.data());
+    // The coefficients in FFTPACK's packed order: coefficient k is at
+    // out[2 k - 1] and out[2 k], except the last of an even length, whose
+    // imaginary part is zero and not stored.
+    const L *out = fft.forward_packed(freq.data(), scratch.data());
     // The peak of each lane, by rstbx's rule: the strongest coefficient from
     // kF0Cutoff on, the first of a tie, compared by magnitude, with a
     // coefficient whose squared magnitude falls short of the running peak's
@@ -311,11 +315,25 @@ private:
     constexpr std::size_t kMax = fftpack::kFloatLanes;
     static_assert(fftpack::kLanes <= kMax);
     const std::size_t n_complex = fft.n_complex();
+    const std::size_t k_stored = (m % 2 == 0) ? n_complex - 1 : n_complex;
+    const L zero = L{};
+    auto coefficient = [&](std::size_t k, L &re, L &im) {
+      re = out[2 * k - 1];
+      im = k < k_stored ? out[2 * k] : zero;
+    };
+    squares.resize(std::max(squares.size(), n_complex));
     L top = L{};
-    for (std::size_t k = kF0Cutoff; k < n_complex; ++k) {
-      const L re = freq[2 * k], im = freq[2 * k + 1];
+    for (std::size_t k = kF0Cutoff; k < k_stored; ++k) {
+      const L re = out[2 * k - 1], im = out[2 * k];
       const L square = re * re + im * im;
-      scratch[k] = square;
+      squares[k] = square;
+      top = (square > top) ? square : top;
+    }
+    for (std::size_t k = std::max(kF0Cutoff, k_stored); k < n_complex; ++k) {
+      L re, im;
+      coefficient(k, re, im);
+      const L square = re * re + im * im;
+      squares[k] = square;
       top = (square > top) ? square : top;
     }
     L threshold;
@@ -326,12 +344,14 @@ private:
     std::size_t p_kmax[kMax] = {};
     double p_kval[kMax] = {}, bound[kMax] = {};
     for (std::size_t k = kF0Cutoff; k < n_complex; ++k) {
-      if (!any_lane(scratch[k] >= threshold))
+      if (!any_lane(squares[k] >= threshold))
         continue;
+      L re, im;
+      coefficient(k, re, im);
       for (std::size_t l = 0; l < count; ++l) {
-        if (!(scratch[k][l] >= threshold[l]))
+        if (!(squares[k][l] >= threshold[l]))
           continue;
-        const double r = freq[2 * k][l], i = freq[2 * k + 1][l];
+        const double r = re[l], i = im[l];
         const double square = r * r + i * i;
         if (!(square >= bound[l]))
           continue;
@@ -370,8 +390,8 @@ private:
   std::vector<double> projections_;
   std::vector<Pending> pending_;
   bool single_precision_;
-  std::vector<fftpack::Lanes> freq_, scratch_;
-  std::vector<fftpack::FloatLanes> freq_float_, scratch_float_;
+  std::vector<fftpack::Lanes> freq_, scratch_, squares_;
+  std::vector<fftpack::FloatLanes> freq_float_, scratch_float_, squares_float_;
 };
 
 std::vector<Direction> construct_hemisphere_grid(double sampling) {

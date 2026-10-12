@@ -50,8 +50,15 @@ public:
   // the twiddles rounded to float.
   template <class T> void forward(T *seq, T *scratch) const;
 
+  // The same transform, left where its last pass wrote it, in FFTPACK's
+  // packed order: the returned values are r0, r1, i1, r2, i2, ..., with the
+  // real coefficient n_real / 2 last when n_real is even. It is in seq or in
+  // scratch, and the other holds what the passes left.
+  template <class T> const T *forward_packed(T *seq, T *scratch) const;
+
 private:
-  template <class T> void forward_compressed(T *c, T *ch) const;
+  // Returns whether the result ended in ch rather than c.
+  template <class T> bool forward_compressed(T *c, T *ch) const;
   void compute_twiddles();
   template <class W> const W *twiddles() const {
     if constexpr (std::is_same_v<W, float>)

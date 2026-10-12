@@ -492,9 +492,9 @@ void RealToComplex::compute_twiddles() {
   }
 }
 
-template <class T> void RealToComplex::forward_compressed(T *c, T *ch) const {
+template <class T> bool RealToComplex::forward_compressed(T *c, T *ch) const {
   if (n_ < 2)
-    return;
+    return false;
   const E<T> *wa = twiddles<E<T>>();
   std::size_t na = 1;
   std::size_t l2 = n_;
@@ -548,14 +548,18 @@ template <class T> void RealToComplex::forward_compressed(T *c, T *ch) const {
     }
     l2 = l1;
   }
-  if (na == 1)
-    return;
-  for (std::size_t i = 1; i <= n_; i++)
-    c[i - 1] = ch[i - 1];
+  return na != 1;
+}
+
+template <class T>
+const T *RealToComplex::forward_packed(T *seq, T *scratch) const {
+  return forward_compressed(seq, scratch) ? scratch : seq;
 }
 
 template <class T> void RealToComplex::forward(T *seq, T *scratch) const {
-  forward_compressed(seq, scratch);
+  if (forward_compressed(seq, scratch))
+    for (std::size_t i = 0; i < n_; i++)
+      seq[i] = scratch[i];
   std::copy_backward(seq + 1, seq + n_, seq + n_ + 1);
   seq[1] = T{};
   if ((n_ & 1) == 0)
@@ -566,5 +570,10 @@ template void RealToComplex::forward(double *, double *) const;
 template void RealToComplex::forward(Lanes *, Lanes *) const;
 template void RealToComplex::forward(float *, float *) const;
 template void RealToComplex::forward(FloatLanes *, FloatLanes *) const;
+template const double *RealToComplex::forward_packed(double *, double *) const;
+template const Lanes *RealToComplex::forward_packed(Lanes *, Lanes *) const;
+template const float *RealToComplex::forward_packed(float *, float *) const;
+template const FloatLanes *RealToComplex::forward_packed(FloatLanes *,
+                                                         FloatLanes *) const;
 
 } // namespace mxi::stills::fftpack
