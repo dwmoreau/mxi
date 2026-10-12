@@ -167,6 +167,9 @@ and FFTPACK's twiddles), which can differ from `sin` and `cos` in the last bit, 
 grid's winners a direction at distance zero from a winner is not its neighbour. The k nearest
 directions are found by hashing the grid into cubes of the quick grid's size; ANN's kd-tree can
 differ from that only on an exact tie at the k-th place, which the corpus never meets.
+Directions whose transforms have the same length are transformed together, one in each lane of
+a vector of doubles (`fftpack::Lanes`); each lane is the scalar transform's arithmetic, so the
+order in which directions are evaluated changes nothing.
 
 On every fft1d call of the R3 corpus (352), replayed: the same basis vectors in the same order,
 bit-identical, and the same refusal on the four with seven or fewer spots. With dials' fft1d
@@ -250,6 +253,11 @@ Not yet departures, but named as candidates:
   psii frames and 238 of cytochrome's integrated reflections; stopping refinement at 1/16 of
   the grid saves 2-7 % and moves frames both ways. None is free, so
   rstbx's grid stays; a cut would have to be scored by merged statistics.
+- **Measured and not adopted: a build for the host by default** (R10, `runs/r10-perf/`). With
+  `-march=native -ffp-contract=off` every result is bit-identical and the indexing time is
+  0.85-0.9 of the portable build's on cytochrome and psii, but the module would not run on an
+  older x86-64; it is a build option (`docs/stills.md`). Without `-ffp-contract=off` on mxi's
+  own library the refinement's results change (fused multiply-add in `solve_spd`).
 - **The integration predictor's mosaic term.** dials' `NaveStillsReflectionPredictor` adds a
   quarter of the fitted full mosaicity where eq. 16 adds a half, so integration accepts a
   narrower band than the fit describes. Not in this library yet; it matters when integration

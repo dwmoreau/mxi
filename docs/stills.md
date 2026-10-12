@@ -121,6 +121,21 @@ after an edit is incremental. Use the same compiler as the Python the module
 is loaded into, so the C++ runtime matches. In a DIALS conda environment that
 is `conda_base/bin/x86_64-conda-linux-gnu-c++`.
 
+The default build is portable to any x86-64. A build for the host is about
+0.85-0.9 of its indexing time on cytochrome and psii, with the same results
+bit for bit (measured with the CMake build; R10):
+
+```sh
+<target python> -m pip install . \
+    -C cmake.define.CMAKE_CXX_FLAGS="-march=native -ffp-contract=off"
+```
+
+`-ffp-contract=off` must cover the whole build, not only the stills library:
+the refinement's linear solve is mxi's `solve_spd`, and with fused multiply-add
+contracted into it the refinement no longer reproduces dials' arithmetic. With
+AVX, fft1d transforms four directions at once instead of two
+(`fftpack::kLanes`).
+
 To check what is installed:
 
 ```sh
