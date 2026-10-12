@@ -20,6 +20,8 @@ add_library(mxi_stills STATIC
   src/stills/candidates.cc
   src/stills/cell.cc
   src/stills/crystal.cc
+  src/stills/fft1d.cc
+  src/stills/fftpack.cc
   src/stills/geometry.cc
   src/stills/index.cc
   src/stills/known_symmetry.cc
@@ -46,6 +48,7 @@ add_executable(mxi_stills_tests
   tests/main.cc
   tests/stills/test_apply_symmetry.cc
   tests/stills/test_candidates.cc
+  tests/stills/test_fft1d.cc
   tests/stills/test_geometry.cc
   tests/stills/test_known_symmetry.cc
   tests/stills/test_method_list.cc
@@ -60,7 +63,8 @@ add_test(NAME mxi_stills_tests COMMAND mxi_stills_tests)
 if(MXI_PYTHON)
   find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
   find_package(pybind11 CONFIG REQUIRED)
-  pybind11_add_module(_mxi_stills bindings/module.cc bindings/known_symmetry.cc)
+  pybind11_add_module(_mxi_stills bindings/module.cc bindings/known_symmetry.cc
+  bindings/basis_vector_search.cc)
   target_link_libraries(_mxi_stills PRIVATE mxi_stills)
   target_compile_options(_mxi_stills PRIVATE -Wall -Wextra)
   install(TARGETS _mxi_stills LIBRARY DESTINATION mxi_stills COMPONENT python)

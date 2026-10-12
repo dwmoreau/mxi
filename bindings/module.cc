@@ -267,6 +267,7 @@ std::vector<std::array<int, 3>> miller_of(const IndexArray &miller) {
 } // namespace
 
 void bind_known_symmetry(py::module_ &m);
+void bind_basis_vector_search(py::module_ &m);
 
 PYBIND11_MODULE(_mxi_stills, m) {
   m.doc() = "mxi stills indexing for dials.stills_process";
@@ -627,4 +628,5 @@ PYBIND11_MODULE(_mxi_stills, m) {
       "of every row, (0, 0, 0) and -1 where unassigned.");
 
   bind_known_symmetry(m);
+  bind_basis_vector_search(m);
 }

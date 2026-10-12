@@ -150,6 +150,28 @@ nothing), the change of basis identical as an integer operator, the constrained 
 and cell bit-identical, and its space group equal. Evidence:
 `stills_process_profiling/claude/rewrite/runs/r8a-symmetry/apply/`.
 
+**The fft1d search** (`src/stills/fft1d`, `fftpack`). dials' `FFT1D` as rstbx runs it
+(Steller, Bolotovsky & Rossmann 1997; Sauter, Grosse-Kunstleve & Adams 2004), with rstbx's
+departures from the papers kept: the characteristic grid from the highest-resolution spot; the
+hemisphere grid; the adaptive two-pass search below 0.016 rad; the directional FFT's 5-smooth
+length, histogram and peak rule, in the campaign's version that screens coefficients by
+squared magnitude; the 0.087 clustering and the N/4 cut; `refine_direction`; and
+`setSolutions` with libstdc++'s unstable `std::sort`, which the fork shares with cctbx's build.
+The transform is scitbx's FFTPACK (rfftf), factorisation and twiddles included. Two things
+reproduce rstbx's compiled code rather than its source: rstbx's binary takes every sine and
+cosine of one angle from a single `sincos` call (the grid directions, the Rodrigues rotations
+and FFTPACK's twiddles), which can differ from `sin` and `cos` in the last bit, so these use
+`sincos` too; and cctbx builds ANN without self-matches, so in the restriction to the quick
+grid's winners a direction at distance zero from a winner is not its neighbour. The k nearest
+directions are found by hashing the grid into cubes of the quick grid's size; ANN's kd-tree can
+differ from that only on an exact tie at the k-th place, which the corpus never meets.
+
+On every fft1d call of the R3 corpus (352), replayed: the same basis vectors in the same order,
+bit-identical, and the same refusal on the four with seven or fewer spots. With dials' fft1d
+replaced by this one, stills_process gives the same output on all five datasets (0 differences
+in frames, crystals, indexed and integrated reflections). Evidence:
+`stills_process_profiling/claude/rewrite/runs/r8b-fft1d/`.
+
 **The method fallback** (`src/stills/method_list.hh`). stills_process's `method_list`: each
 method's indexer is set up outside the error handling, so an error there ends the attempt; an
 error from the search is kept and the next method tried; the first success is the result; the
