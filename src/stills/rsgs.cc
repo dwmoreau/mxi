@@ -51,7 +51,9 @@ double pairwise_sum(const double *a, std::size_t n) {
 
 // cos(2 pi x). x is reduced exactly to r = x - q / 4 with q = round(4 x), so
 // |r| <= 1/8, and the cosine or sine of 2 pi r, by Taylor series to within
-// 1e-17, is taken as q mod 4 requires: cos, -sin, -cos, sin.
+// 1e-17, is taken as q mod 4 requires: cos, -sin, -cos, sin. The two series
+// are one Horner evaluation with the coefficients of whichever the quadrant
+// needs, the sine's ending a term early with a zero coefficient.
 inline double cos_two_pi(double x) {
   constexpr double kShift = 6755399441055744.0; // 1.5 * 2^52: rounds to integer
   const double shifted = 4.0 * x + kShift;
@@ -60,27 +62,20 @@ inline double cos_two_pi(double x) {
   std::memcpy(&bits, &shifted, sizeof bits);
   const double y = (x - 0.25 * q) * (2 * M_PI);
   const double z = y * y;
-  const double c =
-      1.0 +
-      z * (-1.0 / 2 +
-           z * (1.0 / 24 +
-                z * (-1.0 / 720 +
-                     z * (1.0 / 40320 +
-                          z * (-1.0 / 3628800 +
-                               z * (1.0 / 479001600 +
-                                    z * (-1.0 / 87178291200.0 +
-                                         z * (1.0 / 20922789888000.0))))))));
-  const double s =
-      y *
-      (1.0 + z * (-1.0 / 6 +
-                  z * (1.0 / 120 +
-                       z * (-1.0 / 5040 +
-                            z * (1.0 / 362880 +
-                                 z * (-1.0 / 39916800 +
-                                      z * (1.0 / 6227020800.0 +
-                                           z * (-1.0 / 1307674368000.0))))))));
   const unsigned quadrant = static_cast<unsigned>(bits & 3u);
-  const double v = (quadrant & 1u) ? s : c;
+  const bool odd = (quadrant & 1u) != 0;
+  const double a8 = odd ? 0.0 : 1.0 / 20922789888000.0;
+  const double a7 = odd ? -1.0 / 1307674368000.0 : -1.0 / 87178291200.0;
+  const double a6 = odd ? 1.0 / 6227020800.0 : 1.0 / 479001600;
+  const double a5 = odd ? -1.0 / 39916800 : -1.0 / 3628800;
+  const double a4 = odd ? 1.0 / 362880 : 1.0 / 40320;
+  const double a3 = odd ? -1.0 / 5040 : -1.0 / 720;
+  const double a2 = odd ? 1.0 / 120 : 1.0 / 24;
+  const double a1 = odd ? -1.0 / 6 : -1.0 / 2;
+  const double p =
+      1.0 +
+      z * (a1 + z * (a2 + z * (a3 + z * (a4 + z * (a5 + z * (a6 + z * (a7 + z * a8)))))));
+  const double v = odd ? y * p : p;
   return ((quadrant + 1u) & 2u) ? -v : v;
 }
 
