@@ -34,3 +34,17 @@ def test_fft1d_trace():
 def test_fft1d_refuses_seven_spots():
     with pytest.raises(mxi_stills.TooFewSpots):
         mxi_stills.fft1d_basis_vectors(lattice_rlp()[:7], 60.0)
+
+
+def test_real_space_grid_search_finds_the_cell_axes():
+    # The target cell's own lengths, searched against its own reciprocal
+    # lattice: the strongest vectors include each axis at its length.
+    s = mxi_stills.RealSpaceGridSearch((10.0, 20.0, 30.0, 90, 90, 90))
+    assert len(s.search_vectors) == 3 * len(mxi_stills.hemisphere_grid(0.02))
+    v = s.find_basis_vectors(lattice_rlp())
+    assert 3 <= len(v) <= 30
+    lengths = np.linalg.norm(v, axis=1)
+    for axis, length in ((0, 10), (1, 20), (2, 30)):
+        along = [x for x, n in zip(v, lengths)
+                 if np.isclose(n, length) and abs(abs(x[axis]) - n) < 0.05 * n]
+        assert along, (axis, length)

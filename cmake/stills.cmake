@@ -30,6 +30,7 @@ add_library(mxi_stills STATIC
   src/stills/outliers.cc
   src/stills/predict.cc
   src/stills/reduction.cc
+  src/stills/rsgs.cc
   src/stills/refine.cc
   src/stills/sgtbx.cc
   src/stills/sgtbx_tables.cc
@@ -54,6 +55,7 @@ add_executable(mxi_stills_tests
   tests/stills/test_method_list.cc
   tests/stills/test_outliers.cc
   tests/stills/test_refine.cc
+  tests/stills/test_rsgs.cc
 )
 target_include_directories(mxi_stills_tests PRIVATE tests)
 target_link_libraries(mxi_stills_tests PRIVATE mxi_stills)

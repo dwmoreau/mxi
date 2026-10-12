@@ -172,6 +172,23 @@ replaced by this one, stills_process gives the same output on all five datasets 
 in frames, crystals, indexed and integrated reflections). Evidence:
 `stills_process_profiling/claude/rewrite/runs/r8b-fft1d/`.
 
+**The real-space grid search** (`src/stills/rsgs`). dials' `RealSpaceGridSearch` (Gildea et al.
+2014, section 3): each distinct target-cell length, ascending, along each direction of the
+hemisphere grid at 0.02 rad; each scored by sum_j cos(2 pi r_j . v); a stable descending sort;
+dials' `group_vectors` (within 10 % in length and 5 degrees of a group's running mean, stopping
+at 30 groups), which departs from the paper's removal of collinear vectors; and the heaviest
+member of each group. dials scores with numpy, so the arithmetic that decides ties is numpy's
+on this machine, measured and reproduced: OpenBLAS's dgemm forms each dot product as
+fma(a2, b2, fma(a1, b1, a0 * b0)) (checked against libm's fma on 1,716 real products), and each
+row is summed by numpy's pairwise summation (checked against np.sum on rows of 1 to 1,000).
+That dgemm order is a property of this machine's OpenBLAS kernel, not of dials; on another
+kernel dials' own result could move, and this one would not follow it. The cost is the cosine,
+which must be glibc's, so the search runs at about dials' speed (0.97 to 1.0 of it).
+
+On every grid-search call of the R3 corpus (143), replayed: the same basis vectors in the same
+order, bit-identical. With both of dials' searches replaced by these, stills_process gives the
+same output on all five datasets. Evidence: `stills_process_profiling/claude/rewrite/runs/r8c-rsgs/`.
+
 **The method fallback** (`src/stills/method_list.hh`). stills_process's `method_list`: each
 method's indexer is set up outside the error handling, so an error there ends the attempt; an
 error from the search is kept and the next method tried; the first success is the result; the

@@ -4,9 +4,11 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <array>
 #include <optional>
 
 #include "stills/fft1d.hh"
+#include "stills/rsgs.hh"
 
 namespace py = pybind11;
 using namespace mxi::stills;
@@ -74,6 +76,35 @@ void bind_basis_vector_search(py::module_ &m) {
       "first. With trace, also the intermediate steps: the grid, the "
       "directions searched, and (kval, length, direction) before and after "
       "refinement.");
+
+  py::class_<RealSpaceGridSearch>(m, "RealSpaceGridSearch")
+      .def(py::init([](const std::array<double, 6> &cell,
+                       double characteristic_grid) {
+             return RealSpaceGridSearch(cell, characteristic_grid);
+           }),
+           py::arg("target_unit_cell"), py::arg("characteristic_grid") = 0.02,
+           "dials' RealSpaceGridSearch for a target cell (six parameters).")
+      .def(
+          "find_basis_vectors",
+          [](const RealSpaceGridSearch &s, const Array &rlp,
+             std::size_t max_vectors) {
+            return vectors_array(
+                s.find_basis_vectors(vectors_from(rlp, "rlp"), max_vectors));
+          },
+          py::arg("rlp"), py::arg("max_vectors") = 30,
+          "The basis vectors (n, 3), strongest first.")
+      .def(
+          "scores",
+          [](const RealSpaceGridSearch &s, const Array &rlp) {
+            const auto w = s.scores(vectors_from(rlp, "rlp"));
+            return py::array_t<double>(static_cast<py::ssize_t>(w.size()),
+                                       w.data());
+          },
+          py::arg("rlp"), "One score per search vector, in their order.")
+      .def_property_readonly("search_vectors",
+                             [](const RealSpaceGridSearch &s) {
+                               return vectors_array(s.search_vectors());
+                             });
 
   m.def(
       "hemisphere_grid",

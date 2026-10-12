@@ -66,6 +66,9 @@ library. The module wraps it with pybind11 (`bindings/`).
   `fft1d_basis_vectors` is dials' `FFT1D.find_basis_vectors`: rstbx's DPS
   search over the hemisphere, with its adaptive two-pass grid, refinement and
   ranking, and scitbx's FFTPACK transform.
+- **The real-space grid search** (`src/stills/rsgs.hh`).
+  `RealSpaceGridSearch` is dials' grid search for a known cell: the cell's
+  lengths laid along a hemisphere of directions, scored, and grouped.
 - **The method fallback** (`src/stills/method_list.hh`).
   `index_with_method_list` tries `indexing.stills.method_list` in order, as
   stills_process does.
@@ -83,12 +86,12 @@ dials' own values for real spots on detectors of 256, 32, 8 and 1 panels, and
 the refinement against dials' own runs on real stills in five space groups,
 the outlier rejection and Nave fit against dials' own calls, and the cell
 reduction, candidates and index assignment, the space-group types, the
-known-symmetry filter, apply_symmetry and the fft1d search against cctbx's and
-dials' own results, and the method fallback against stub searches. Those values are
+known-symmetry filter, apply_symmetry and both basis-vector searches against
+cctbx's and dials' own results, and the method fallback against stub searches. Those values are
 in `tests/stills/real_stills.hh`, `tests/stills/real_refine.hh`,
 `tests/stills/real_outliers.hh`, `tests/stills/real_candidates.hh` and
-`tests/stills/real_symmetry.hh` and `tests/stills/real_fft1d.hh`, which are
-generated.
+`tests/stills/real_symmetry.hh`, `tests/stills/real_fft1d.hh` and
+`tests/stills/real_rsgs.hh`, which are generated.
 
 ## Building
 
