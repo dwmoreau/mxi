@@ -11,6 +11,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <set>
 
 #include "stills/fft1d.hh"
@@ -45,6 +47,41 @@ double pairwise_sum(const double *a, std::size_t n) {
   std::size_t n2 = n / 2;
   n2 -= n2 % 8;
   return pairwise_sum(a, n2) + pairwise_sum(a + n2, n - n2);
+}
+
+// cos(2 pi x). x is reduced exactly to r = x - q / 4 with q = round(4 x), so
+// |r| <= 1/8, and the cosine or sine of 2 pi r, by Taylor series to within
+// 1e-17, is taken as q mod 4 requires: cos, -sin, -cos, sin.
+inline double cos_two_pi(double x) {
+  constexpr double kShift = 6755399441055744.0; // 1.5 * 2^52: rounds to integer
+  const double shifted = 4.0 * x + kShift;
+  const double q = shifted - kShift;
+  std::uint64_t bits;
+  std::memcpy(&bits, &shifted, sizeof bits);
+  const double y = (x - 0.25 * q) * (2 * M_PI);
+  const double z = y * y;
+  const double c =
+      1.0 +
+      z * (-1.0 / 2 +
+           z * (1.0 / 24 +
+                z * (-1.0 / 720 +
+                     z * (1.0 / 40320 +
+                          z * (-1.0 / 3628800 +
+                               z * (1.0 / 479001600 +
+                                    z * (-1.0 / 87178291200.0 +
+                                         z * (1.0 / 20922789888000.0))))))));
+  const double s =
+      y *
+      (1.0 + z * (-1.0 / 6 +
+                  z * (1.0 / 120 +
+                       z * (-1.0 / 5040 +
+                            z * (1.0 / 362880 +
+                                 z * (-1.0 / 39916800 +
+                                      z * (1.0 / 6227020800.0 +
+                                           z * (-1.0 / 1307674368000.0))))))));
+  const unsigned quadrant = static_cast<unsigned>(bits & 3u);
+  const double v = (quadrant & 1u) ? s : c;
+  return ((quadrant + 1u) & 2u) ? -v : v;
 }
 
 // scitbx.matrix's length, dot and angle (degrees), as Python evaluates them.
@@ -94,18 +131,20 @@ RealSpaceGridSearch::RealSpaceGridSearch(const std::array<double, 6> &cell,
 
 std::vector<double>
 RealSpaceGridSearch::scores(const std::vector<Vec3> &rlp) const {
-  const double two_pi = 2 * M_PI;
+  const std::size_t n = rlp.size();
+  std::vector<double> bx(n), by(n), bz(n);
+  for (std::size_t j = 0; j < n; ++j) {
+    bx[j] = rlp[j][0];
+    by[j] = rlp[j][1];
+    bz[j] = rlp[j][2];
+  }
   std::vector<double> out(sv_.size());
-  std::vector<double> row(rlp.size());
+  std::vector<double> row(n);
   for (std::size_t i = 0; i < sv_.size(); ++i) {
-    const Vec3 &a = sv_[i];
-    for (std::size_t j = 0; j < rlp.size(); ++j) {
-      const Vec3 &b = rlp[j];
-      const double dot =
-          std::fma(a[2], b[2], std::fma(a[1], b[1], a[0] * b[0]));
-      row[j] = std::cos(two_pi * dot);
-    }
-    out[i] = pairwise_sum(row.data(), row.size());
+    const double ax = sv_[i][0], ay = sv_[i][1], az = sv_[i][2];
+    for (std::size_t j = 0; j < n; ++j)
+      row[j] = cos_two_pi(ax * bx[j] + ay * by[j] + az * bz[j]);
+    out[i] = pairwise_sum(row.data(), n);
   }
   return out;
 }
