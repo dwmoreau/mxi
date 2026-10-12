@@ -85,7 +85,13 @@ struct IndexerSettings {
   double rsgs_characteristic_grid = 0.02;
   std::size_t rsgs_max_vectors = 30;
 
-  RefineOptions refine;
+  // Refinement takes the analytic derivative with respect to the rotation axis
+  // (ledger row 6).
+  RefineOptions refine = [] {
+    RefineOptions r;
+    r.axis_derivative = AxisDerivative::analytic;
+    return r;
+  }();
   NaveOptions nave;
 };
 

@@ -204,7 +204,7 @@ void bind_indexer(py::module_ &m) {
            py::arg("xy_rmsd_threshold") = 2.0,
            py::arg("fft1d_characteristic_grid") = py::none(),
            py::arg("rsgs_characteristic_grid") = 0.02,
-           py::arg("axis_derivative") = "dials",
+           py::arg("axis_derivative") = "analytic",
            py::arg("safe_likelihood") = true,
            py::arg("ewald_proximal_volume_max") = 0.0025,
            py::arg("ewald_proximity_resolution_cutoff") = 2.0,

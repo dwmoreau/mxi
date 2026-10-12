@@ -1,6 +1,8 @@
 // The indexer on whole corpus frames, against dials' result: the same refined
-// reflections with the same indices, the crystal to well within the agreement
-// R6 found for refinement, and the Nave model to its fit's flat direction.
+// reflections, with dials' indices up to one operator of the lattice
+// (candidates that are one lattice in several settings tie on RMSD, and either
+// setting may win), the crystal to well within the agreement R6 found for
+// refinement, and the Nave model to its fit's flat direction.
 
 #include <algorithm>
 #include <cmath>
@@ -54,20 +56,57 @@ IndexerSettings settings_of(const real_frames::RealFrame &f) {
   return s;
 }
 
+// The integer matrix M, elements in {-1, 0, 1} and determinant +-1, with
+// M h = h_dials for every row, if there is one.
+bool setting_operator(const std::vector<std::array<int, 3>> &h,
+                      const std::vector<std::array<int, 3>> &h_dials,
+                      std::array<int, 9> *out) {
+  std::array<int, 9> m{};
+  for (int code = 0; code < 19683; ++code) {
+    int c = code;
+    for (int &e : m) {
+      e = c % 3 - 1;
+      c /= 3;
+    }
+    const int det = m[0] * (m[4] * m[8] - m[5] * m[7]) -
+                    m[1] * (m[3] * m[8] - m[5] * m[6]) +
+                    m[2] * (m[3] * m[7] - m[4] * m[6]);
+    if (det != 1 && det != -1)
+      continue;
+    bool all = true;
+    for (std::size_t r = 0; all && r < h.size(); ++r)
+      for (int i = 0; all && i < 3; ++i)
+        all = m[3 * i] * h[r][0] + m[3 * i + 1] * h[r][1] +
+                  m[3 * i + 2] * h[r][2] ==
+              h_dials[r][static_cast<std::size_t>(i)];
+    if (all) {
+      *out = m;
+      return true;
+    }
+  }
+  return false;
+}
+
 void check_against_dials(const real_frames::RealFrame &f) {
   const StillsIndexer indexer(detector_of(f), settings_of(f));
   const IndexedStill r = indexer.index(f.s0, f.wavelength, spots_of(f));
   check::is_true(r.indexed, f.tag + " indexes: " + r.reason);
   check::is_true(r.row == f.dials_rows, f.tag + ": dials' refined reflections");
-  check::is_true(r.miller_index == f.dials_miller,
-                 f.tag + ": with dials' Miller indices");
+  std::array<int, 9> m{};
+  check::is_true(setting_operator(r.miller_index, f.dials_miller, &m),
+                 f.tag + ": dials' Miller indices, up to one operator");
 
+  // A h = A_dials M h for every h, so A = A_dials M.
   const mxi::Mat3 A = r.crystal.A();
   double largest = 0, worst = 0;
-  for (std::size_t i = 0; i < 9; ++i) {
-    largest = std::max(largest, std::abs(f.dials_A[i]));
-    worst = std::max(worst, std::abs(A.m[i] - f.dials_A[i]));
-  }
+  for (std::size_t i = 0; i < 3; ++i)
+    for (std::size_t j = 0; j < 3; ++j) {
+      double expected = 0;
+      for (std::size_t k = 0; k < 3; ++k)
+        expected += f.dials_A[3 * i + k] * m[3 * k + j];
+      largest = std::max(largest, std::abs(expected));
+      worst = std::max(worst, std::abs(A.m[3 * i + j] - expected));
+    }
   check::is_true(worst <= 1e-6 * largest,
                  f.tag + ": A within 1e-6 of its largest element");
   check::close(r.half_mosaicity_deg, f.dials_half_mosaicity_deg,
