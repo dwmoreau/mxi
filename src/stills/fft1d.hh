@@ -48,6 +48,10 @@ struct Fft1dGrid {
   double quick_grid = 0.016;
   // Refinement stops at characteristic_grid / refine_divisor.
   double refine_divisor = 100.;
+  // Each direction's histogram is transformed in single precision, twice as
+  // many at once; the bins and the peak rule stay in double. Off is rstbx's
+  // arithmetic.
+  bool single_precision = false;
 };
 
 // What a search did, for comparing it with rstbx step by step.

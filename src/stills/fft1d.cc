@@ -114,7 +114,8 @@ std::size_t primecheck(std::size_t input_m) {
 // rstbx's dps_core with its directional FFT and workspace.
 class DpsCore {
 public:
-  DpsCore(const std::vector<Vec3> &xyz, double amax) : xyz_(xyz), amax_(amax) {}
+  DpsCore(const std::vector<Vec3> &xyz, double amax, bool single_precision)
+      : xyz_(xyz), amax_(amax), single_precision_(single_precision) {}
 
   std::size_t size() const { return xyz_.size(); }
 
@@ -133,13 +134,17 @@ public:
                      [&](std::size_t a, std::size_t b) {
                        return extents_[a].m < extents_[b].m;
                      });
+    const std::size_t width =
+        single_precision_ ? fftpack::kFloatLanes : fftpack::kLanes;
     for (std::size_t a = 0; a < n_dirs;) {
       const std::size_t m = extents_[order_[a]].m;
       std::size_t b = a + 1;
-      while (b < n_dirs && b - a < fftpack::kLanes &&
-             extents_[order_[b]].m == m)
+      while (b < n_dirs && b - a < width && extents_[order_[b]].m == m)
         ++b;
-      transform(dirs, &order_[a], b - a);
+      if (single_precision_)
+        transform(dirs, &order_[a], b - a, freq_float_, scratch_float_);
+      else
+        transform(dirs, &order_[a], b - a, freq_, scratch_);
       a = b;
     }
   }
@@ -205,20 +210,22 @@ private:
   // The histograms of up to kLanes directions of one transform length, one
   // per lane, transformed together; each direction's peak is then found in
   // its own lane. Unused lanes transform zeros.
+  template <class L>
   void transform(std::vector<Direction> &dirs, const std::size_t *index,
-                 std::size_t count) {
+                 std::size_t count, std::vector<L> &freq,
+                 std::vector<L> &scratch) {
     const std::size_t m = extents_[index[0]].m;
     const fftpack::RealToComplex &fft = plan(m);
-    freq_.assign(fft.m_real(), fftpack::Lanes{});
+    freq.assign(fft.m_real(), L{});
     for (std::size_t l = 0; l < count; ++l) {
       const Extent &e = extents_[index[l]];
       project(dirs[index[l]]);
       for (double p : projections_)
-        freq_[static_cast<std::size_t>(
-            static_cast<int>(((p - e.pmin) / e.delta_p) + 0.5))][l] += 1.0;
+        freq[static_cast<std::size_t>(
+            static_cast<int>(((p - e.pmin) / e.delta_p) + 0.5))][l] += 1;
     }
-    scratch_.resize(std::max(scratch_.size(), m));
-    fft.forward(freq_.data(), scratch_.data());
+    scratch.resize(std::max(scratch.size(), m));
+    fft.forward(freq.data(), scratch.data());
     const std::size_t n_complex = fft.n_complex();
     for (std::size_t l = 0; l < count; ++l) {
       Direction &d = dirs[index[l]];
@@ -226,7 +233,7 @@ private:
       std::size_t p_kmax = 0;
       double p_kval = 0.0, p_square = 0.0;
       for (std::size_t k = kF0Cutoff; k < n_complex; ++k) {
-        const double re = freq_[2 * k][l], im = freq_[2 * k + 1][l];
+        const double re = freq[2 * k][l], im = freq[2 * k + 1][l];
         const double square = re * re + im * im;
         if (square >= p_square * (1.0 - kKvalTieMargin)) {
           const double value = std::abs(std::complex<double>(re, im));
@@ -260,7 +267,9 @@ private:
   std::vector<double> projections_;
   std::vector<Extent> extents_;
   std::vector<std::size_t> order_;
+  bool single_precision_;
   std::vector<fftpack::Lanes> freq_, scratch_;
+  std::vector<fftpack::FloatLanes> freq_float_, scratch_float_;
 };
 
 std::vector<Direction> construct_hemisphere_grid(double sampling) {
@@ -485,7 +494,7 @@ std::vector<Vec3> fft1d_basis_vectors(const std::vector<Vec3> &rlp,
     const double new_suggestion = 2. * grid;
     cg = std::min(rossmann_suggestion, new_suggestion);
   }
-  DpsCore ai(rlp, max_cell);
+  DpsCore ai(rlp, max_cell, settings.single_precision);
 
   // hemisphere_shortcut: HemisphereSampler(max_grid=0.029,
   // characteristic_grid=cg, quick_grid=0.016).hemisphere(ai, max_cell, 30, 4).

@@ -19,6 +19,19 @@ namespace mxi::stills::fftpack {
 
 namespace {
 
+// The scalar a value type is made of: double for double and Lanes, float for
+// float and FloatLanes.
+template <class T> struct Element {
+  using type = double;
+};
+template <> struct Element<float> {
+  using type = float;
+};
+template <> struct Element<FloatLanes> {
+  using type = float;
+};
+template <class T> using E = typename Element<T>::type;
+
 // scitbx's ref_3d_tp: (ix, iy, iz) -> start[(iz * ny + iy) * nx + ix].
 template <class T> struct Ref3 {
   T *p;
@@ -67,7 +80,7 @@ std::vector<int> factorize(std::size_t n) {
 
 template <class T>
 void passf2(std::size_t ido, std::size_t l1, T *cc_begin, T *ch_begin,
-            const double *wa1) {
+            const E<T> *wa1) {
   const Ref3<T> cc{cc_begin, ido, l1};
   const Ref3<T> ch{ch_begin, ido, 2};
   for (std::size_t k = 0; k < l1; k++) {
@@ -100,11 +113,12 @@ void passf2(std::size_t ido, std::size_t l1, T *cc_begin, T *ch_begin,
 
 template <class T>
 void passf3(std::size_t ido, std::size_t l1, T *cc_begin, T *ch_begin,
-            const double *wa1, const double *wa2) {
+            const E<T> *wa1, const E<T> *wa2) {
   const Ref3<T> cc{cc_begin, ido, l1};
   const Ref3<T> ch{ch_begin, ido, 3};
-  const double taur = -.5;
-  const double taui = -taur * std::sqrt(3.0);
+  const double taur_d = -.5;
+  const E<T> taur = static_cast<E<T>>(taur_d);
+  const E<T> taui = static_cast<E<T>>(-taur_d * std::sqrt(3.0));
   for (std::size_t k = 0; k < l1; k++) {
     const T cr2 = cc(0, k, 1) + cc(0, k, 2);
     ch(0, 0, k) = cc(0, k, 0) + cr2;
@@ -139,10 +153,10 @@ void passf3(std::size_t ido, std::size_t l1, T *cc_begin, T *ch_begin,
 
 template <class T>
 void passf4(std::size_t ido, std::size_t l1, T *cc_begin, T *ch_begin,
-            const double *wa1, const double *wa2, const double *wa3) {
+            const E<T> *wa1, const E<T> *wa2, const E<T> *wa3) {
   const Ref3<T> cc{cc_begin, ido, l1};
   const Ref3<T> ch{ch_begin, ido, 4};
-  const double hsqt2 = .5 * std::sqrt(2.0);
+  const E<T> hsqt2 = static_cast<E<T>>(.5 * std::sqrt(2.0));
   for (std::size_t k = 0; k < l1; k++) {
     const T tr1 = cc(0, k, 1) + cc(0, k, 3);
     const T tr2 = cc(0, k, 0) + cc(0, k, 2);
@@ -197,14 +211,18 @@ void passf4(std::size_t ido, std::size_t l1, T *cc_begin, T *ch_begin,
 
 template <class T>
 void passf5(std::size_t ido, std::size_t l1, T *cc_begin, T *ch_begin,
-            const double *wa1, const double *wa2, const double *wa3,
-            const double *wa4) {
+            const E<T> *wa1, const E<T> *wa2, const E<T> *wa3,
+            const E<T> *wa4) {
   const Ref3<T> cc{cc_begin, ido, l1};
   const Ref3<T> ch{ch_begin, ido, 5};
-  const double tr11 = .309016994374947424102293417182819058860154589903;
-  const double ti11 = .951056516295153572116439333379382143405698634126;
-  const double tr12 = -.809016994374947424102293417182819058860154589903;
-  const double ti12 = .587785252292473129168705954639072768597652437643;
+  const E<T> tr11 =
+      static_cast<E<T>>(.309016994374947424102293417182819058860154589903);
+  const E<T> ti11 =
+      static_cast<E<T>>(.951056516295153572116439333379382143405698634126);
+  const E<T> tr12 =
+      static_cast<E<T>>(-.809016994374947424102293417182819058860154589903);
+  const E<T> ti12 =
+      static_cast<E<T>>(.587785252292473129168705954639072768597652437643);
   for (std::size_t k = 0; k < l1; k++) {
     const T cr2 = cc(0, k, 4) + cc(0, k, 1);
     const T ci5 = cc(0, k, 4) - cc(0, k, 1);
@@ -263,7 +281,7 @@ void passf5(std::size_t ido, std::size_t l1, T *cc_begin, T *ch_begin,
 template <class T>
 void passfg(std::size_t ido, std::size_t ip, std::size_t l1, std::size_t idl1,
             T *cc_begin, T *c1_begin, T *c2_begin, T *ch_begin, T *ch2_begin,
-            const double *wa) {
+            const E<T> *wa) {
   const Ref3<T> cc{cc_begin, ido, ip};
   const Ref3<T> c1{c1_begin, ido, l1};
   const Ref2<T> c2{c2_begin, idl1};
@@ -271,8 +289,9 @@ void passfg(std::size_t ido, std::size_t ip, std::size_t l1, std::size_t idl1,
   const Ref2<T> ch2{ch2_begin, idl1};
   const double tpi = 8.0 * std::atan(1.0);
   const double arg = tpi / static_cast<double>(ip);
-  double dsp, dcp;
-  ::sincos(arg, &dsp, &dcp);
+  double dsp_d, dcp_d;
+  ::sincos(arg, &dsp_d, &dcp_d);
+  const E<T> dsp = static_cast<E<T>>(dsp_d), dcp = static_cast<E<T>>(dcp_d);
   const std::size_t ipph = (ip + 1) / 2;
   const std::size_t nbd = (ido - 1) / 2;
   if (ido == 1) {
@@ -351,24 +370,24 @@ void passfg(std::size_t ido, std::size_t ip, std::size_t l1, std::size_t idl1,
       c1(0, k, jc) = ch(0, k, jc) - ch(0, k, j);
     }
   }
-  double ar1 = 1.;
-  double ai1 = 0.;
+  E<T> ar1 = 1.;
+  E<T> ai1 = 0.;
   for (std::size_t l = 1; l < ipph; l++) {
     const std::size_t lc = ip - l;
-    const double ar1h = dcp * ar1 - dsp * ai1;
+    const E<T> ar1h = dcp * ar1 - dsp * ai1;
     ai1 = dcp * ai1 + dsp * ar1;
     ar1 = ar1h;
     for (std::size_t ik = 0; ik < idl1; ik++) {
       ch2(ik, l) = c2(ik, 0) + ar1 * c2(ik, 1);
       ch2(ik, lc) = ai1 * c2(ik, ip - 1);
     }
-    const double dc2 = ar1;
-    const double ds2 = ai1;
-    double ar2 = ar1;
-    double ai2 = ai1;
+    const E<T> dc2 = ar1;
+    const E<T> ds2 = ai1;
+    E<T> ar2 = ar1;
+    E<T> ai2 = ai1;
     for (std::size_t j = 2; j < ipph; j++) {
       const std::size_t jc = ip - j;
-      const double ar2h = dc2 * ar2 - ds2 * ai2;
+      const E<T> ar2h = dc2 * ar2 - ds2 * ai2;
       ai2 = dc2 * ai2 + ds2 * ar2;
       ar2 = ar2h;
       for (std::size_t ik = 0; ik < idl1; ik++) {
@@ -435,6 +454,11 @@ void passfg(std::size_t ido, std::size_t ip, std::size_t l1, std::size_t idl1,
 
 RealToComplex::RealToComplex(std::size_t n_real)
     : n_(n_real), factors_(factorize(n_real)), wa_(n_real) {
+  compute_twiddles();
+  wa_float_.assign(wa_.begin(), wa_.end());
+}
+
+void RealToComplex::compute_twiddles() {
   if (n_ < 2)
     return;
   double *wa = wa_.data();
@@ -471,7 +495,7 @@ RealToComplex::RealToComplex(std::size_t n_real)
 template <class T> void RealToComplex::forward_compressed(T *c, T *ch) const {
   if (n_ < 2)
     return;
-  const double *wa = wa_.data();
+  const E<T> *wa = twiddles<E<T>>();
   std::size_t na = 1;
   std::size_t l2 = n_;
   std::size_t iw = n_;
@@ -540,5 +564,7 @@ template <class T> void RealToComplex::forward(T *seq, T *scratch) const {
 
 template void RealToComplex::forward(double *, double *) const;
 template void RealToComplex::forward(Lanes *, Lanes *) const;
+template void RealToComplex::forward(float *, float *) const;
+template void RealToComplex::forward(FloatLanes *, FloatLanes *) const;
 
 } // namespace mxi::stills::fftpack

@@ -81,7 +81,12 @@ struct IndexerSettings {
   double volume_change_limit = 0.5;
 
   std::optional<double> fft1d_characteristic_grid;
-  Fft1dGrid fft1d_grid;
+  // fft1d transforms in single precision (ledger row 8).
+  Fft1dGrid fft1d_grid = [] {
+    Fft1dGrid g;
+    g.single_precision = true;
+    return g;
+  }();
   double rsgs_characteristic_grid = 0.02;
   std::size_t rsgs_max_vectors = 30;
 

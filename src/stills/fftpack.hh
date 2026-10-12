@@ -13,6 +13,7 @@
 #pragma once
 
 #include <cstddef>
+#include <type_traits>
 #include <vector>
 
 namespace mxi::stills::fftpack {
@@ -26,6 +27,10 @@ inline constexpr std::size_t kLanes = 4;
 inline constexpr std::size_t kLanes = 2;
 #endif
 using Lanes = double __attribute__((vector_size(kLanes * sizeof(double))));
+// The same register as floats: 2 * kLanes of them.
+inline constexpr std::size_t kFloatLanes = 2 * kLanes;
+using FloatLanes =
+    float __attribute__((vector_size(kFloatLanes * sizeof(float))));
 
 class RealToComplex {
 public:
@@ -41,15 +46,24 @@ public:
   // first m_real() hold n_complex() complex values (re, im). scratch holds at
   // least n_real() values. T is double, or Lanes for kLanes transforms at once,
   // one in each lane, each computed exactly as the double transform computes
-  // it.
+  // it; float and FloatLanes are the same transform in single precision, with
+  // the twiddles rounded to float.
   template <class T> void forward(T *seq, T *scratch) const;
 
 private:
   template <class T> void forward_compressed(T *c, T *ch) const;
+  void compute_twiddles();
+  template <class W> const W *twiddles() const {
+    if constexpr (std::is_same_v<W, float>)
+      return wa_float_.data();
+    else
+      return wa_.data();
+  }
 
   std::size_t n_;
   std::vector<int> factors_;
   std::vector<double> wa_;
+  std::vector<float> wa_float_;
 };
 
 } // namespace mxi::stills::fftpack
