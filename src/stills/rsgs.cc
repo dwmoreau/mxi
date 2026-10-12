@@ -49,34 +49,45 @@ double pairwise_sum(const double *a, std::size_t n) {
   return pairwise_sum(a, n2) + pairwise_sum(a + n2, n - n2);
 }
 
-// cos(2 pi x). x is reduced exactly to r = x - q / 4 with q = round(4 x), so
-// |r| <= 1/8, and the cosine or sine of 2 pi r, by Taylor series to within
-// 1e-17, is taken as q mod 4 requires: cos, -sin, -cos, sin. The two series
-// are one Horner evaluation with the coefficients of whichever the quadrant
-// needs, the sine's ending a term early with a zero coefficient.
-inline double cos_two_pi(double x) {
+// Two doubles in one register, each operation lane by lane, exactly as on a
+// double.
+using D2 = double __attribute__((vector_size(16)));
+using I2 = long long __attribute__((vector_size(16)));
+
+// cos(2 pi x), two lanes at a time. x is reduced exactly to r = x - q / 4
+// with q = round(4 x), so |r| <= 1/8, and the cosine or sine of 2 pi r, by
+// Taylor series to within 1e-17, is taken as q mod 4 requires: cos, -sin,
+// -cos, sin. The two series are one Horner evaluation with the coefficients
+// of whichever the quadrant needs, the sine's ending a term early with a zero
+// coefficient.
+inline D2 cos_two_pi(D2 x) {
   constexpr double kShift = 6755399441055744.0; // 1.5 * 2^52: rounds to integer
-  const double shifted = 4.0 * x + kShift;
-  const double q = shifted - kShift;
-  std::uint64_t bits;
+  const D2 shifted = 4.0 * x + kShift;
+  const D2 q = shifted - kShift;
+  I2 bits;
   std::memcpy(&bits, &shifted, sizeof bits);
-  const double y = (x - 0.25 * q) * (2 * M_PI);
-  const double z = y * y;
-  const unsigned quadrant = static_cast<unsigned>(bits & 3u);
-  const bool odd = (quadrant & 1u) != 0;
-  const double a8 = odd ? 0.0 : 1.0 / 20922789888000.0;
-  const double a7 = odd ? -1.0 / 1307674368000.0 : -1.0 / 87178291200.0;
-  const double a6 = odd ? 1.0 / 6227020800.0 : 1.0 / 479001600;
-  const double a5 = odd ? -1.0 / 39916800 : -1.0 / 3628800;
-  const double a4 = odd ? 1.0 / 362880 : 1.0 / 40320;
-  const double a3 = odd ? -1.0 / 5040 : -1.0 / 720;
-  const double a2 = odd ? 1.0 / 120 : 1.0 / 24;
-  const double a1 = odd ? -1.0 / 6 : -1.0 / 2;
-  const double p =
+  const D2 y = (x - 0.25 * q) * (2 * M_PI);
+  const D2 z = y * y;
+  const I2 quadrant = bits & 3;
+  const I2 odd = (quadrant & 1) == 1;
+  const I2 negate = ((quadrant + 1) & 2) == 2;
+  auto pick = [&](double s, double c) {
+    const D2 ss = {s, s}, cc = {c, c};
+    return odd ? ss : cc;
+  };
+  const D2 a8 = pick(0.0, 1.0 / 20922789888000.0);
+  const D2 a7 = pick(-1.0 / 1307674368000.0, -1.0 / 87178291200.0);
+  const D2 a6 = pick(1.0 / 6227020800.0, 1.0 / 479001600);
+  const D2 a5 = pick(-1.0 / 39916800, -1.0 / 3628800);
+  const D2 a4 = pick(1.0 / 362880, 1.0 / 40320);
+  const D2 a3 = pick(-1.0 / 5040, -1.0 / 720);
+  const D2 a2 = pick(1.0 / 120, 1.0 / 24);
+  const D2 a1 = pick(-1.0 / 6, -1.0 / 2);
+  const D2 p =
       1.0 +
       z * (a1 + z * (a2 + z * (a3 + z * (a4 + z * (a5 + z * (a6 + z * (a7 + z * a8)))))));
-  const double v = odd ? y * p : p;
-  return ((quadrant + 1u) & 2u) ? -v : v;
+  const D2 v = odd ? y * p : p;
+  return negate ? -v : v;
 }
 
 // scitbx.matrix's length, dot and angle (degrees), as Python evaluates them.
@@ -127,18 +138,27 @@ RealSpaceGridSearch::RealSpaceGridSearch(const std::array<double, 6> &cell,
 std::vector<double>
 RealSpaceGridSearch::scores(const std::vector<Vec3> &rlp) const {
   const std::size_t n = rlp.size();
-  std::vector<double> bx(n), by(n), bz(n);
+  // Each coordinate array padded to an even length, so every point is scored
+  // in a lane; the padding scores nothing.
+  const std::size_t n2 = n + (n & 1);
+  std::vector<double> bx(n2, 0.), by(n2, 0.), bz(n2, 0.);
   for (std::size_t j = 0; j < n; ++j) {
     bx[j] = rlp[j][0];
     by[j] = rlp[j][1];
     bz[j] = rlp[j][2];
   }
   std::vector<double> out(sv_.size());
-  std::vector<double> row(n);
+  std::vector<double> row(n2);
   for (std::size_t i = 0; i < sv_.size(); ++i) {
     const double ax = sv_[i][0], ay = sv_[i][1], az = sv_[i][2];
-    for (std::size_t j = 0; j < n; ++j)
-      row[j] = cos_two_pi(ax * bx[j] + ay * by[j] + az * bz[j]);
+    for (std::size_t j = 0; j < n2; j += 2) {
+      D2 x, y, z;
+      std::memcpy(&x, bx.data() + j, sizeof x);
+      std::memcpy(&y, by.data() + j, sizeof y);
+      std::memcpy(&z, bz.data() + j, sizeof z);
+      const D2 c = cos_two_pi(ax * x + ay * y + az * z);
+      std::memcpy(row.data() + j, &c, sizeof c);
+    }
     out[i] = pairwise_sum(row.data(), n);
   }
   return out;
