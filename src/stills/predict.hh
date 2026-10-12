@@ -66,8 +66,22 @@ struct RayDerivative {
   double dx = 0.0, dy = 0.0, ddelpsi = 0.0;
 };
 
+// What the derivatives at a predicted ray need that does not depend on dq,
+// so that one frame serves every parameter's dq.
+struct RayFrame {
+  Vec3 r, q0, e1, e1_r;
+  double q_scalar = 0.0, qq = 0.0;
+  double cos_delpsi = 0.0, sin_delpsi = 0.0, one_minus_cos = 0.0;
+  double e1_r_dot_s0 = 0.0, e1_dot_q_versin = 0.0, n_norm = 0.0;
+  double w_inv = 0.0, u_w_inv = 0.0, v_w_inv = 0.0;
+};
+RayFrame ray_frame(const Beam &beam, const Ray &ray);
+
 // The derivatives of X, Y and Delta-Psi for a change dq in q, at a predicted
 // ray.
+RayDerivative ray_derivative(const Beam &beam, const Ray &ray,
+                             const RayFrame &frame, const Mat3 &D,
+                             const Vec3 &dq, AxisDerivative mode);
 RayDerivative ray_derivative(const Beam &beam, const Ray &ray, const Mat3 &D,
                              const Vec3 &dq, AxisDerivative mode);
 

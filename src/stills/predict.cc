@@ -10,6 +10,7 @@
 #include "predict.hh"
 
 #include <cmath>
+#include <math.h>
 
 namespace mxi::stills {
 
@@ -72,22 +73,38 @@ PredictStatus predict(const Beam &beam, const Mat3 &A,
   return PredictStatus::ok;
 }
 
-RayDerivative ray_derivative(const Beam &beam, const Ray &ray, const Mat3 &D,
-                             const Vec3 &dq, AxisDerivative mode) {
+RayFrame ray_frame(const Beam &beam, const Ray &ray) {
   // The derivative code takes r from the predicted s1, and e1 from q0 x s0,
   // as dials' stills prediction parameterisation does.
-  const Vec3 r = ray.s1 - beam.s0;
-  const double q_scalar = ray.q.norm();
-  const double qq = q_scalar * q_scalar;
-  const Vec3 q0 = unit(ray.q);
-  const Vec3 e1 = unit(q0.cross(beam.unit_s0));
+  RayFrame f;
+  f.r = ray.s1 - beam.s0;
+  f.q_scalar = ray.q.norm();
+  f.qq = f.q_scalar * f.q_scalar;
+  f.q0 = unit(ray.q);
+  const Vec3 n = f.q0.cross(beam.unit_s0);
+  f.e1 = unit(n);
+  f.n_norm = n.norm();
+  ::sincos(ray.delpsi, &f.sin_delpsi, &f.cos_delpsi);
+  f.one_minus_cos = 1.0 - f.cos_delpsi;
+  f.e1_r = f.e1.cross(f.r);
+  f.e1_r_dot_s0 = f.e1_r.dot(beam.s0);
+  f.e1_dot_q_versin = f.e1.dot(ray.q) * f.one_minus_cos;
+  f.w_inv = 1.0 / ray.pv.z;
+  f.u_w_inv = ray.pv.x * f.w_inv;
+  f.v_w_inv = ray.pv.y * f.w_inv;
+  return f;
+}
 
-  const Vec3 dr = rotate_about_unit(dq, e1, ray.delpsi);
-  const Vec3 e1_r = e1.cross(r);
-  const double ddelpsi = -1.0 * dr.dot(ray.s1) / e1_r.dot(beam.s0);
+RayDerivative ray_derivative(const Beam &beam, const Ray &ray,
+                             const RayFrame &f, const Mat3 &D, const Vec3 &dq,
+                             AxisDerivative mode) {
+  const Vec3 &e1 = f.e1;
+  const double c = f.cos_delpsi, s = f.sin_delpsi, versin = f.one_minus_cos;
+  const Vec3 dr = dq * c + e1 * (e1.dot(dq)) * versin + e1.cross(dq) * s;
+  const double ddelpsi = -1.0 * dr.dot(ray.s1) / f.e1_r_dot_s0;
 
   const double q_dot_dq = ray.q.dot(dq);
-  const Vec3 dq0 = (dq * q_scalar - q0 * q_dot_dq) / qq;
+  const Vec3 dq0 = (dq * f.q_scalar - f.q0 * q_dot_dq) / f.qq;
   const Vec3 de1 = dq0.cross(beam.unit_s0);
 
   Vec3 drde;
@@ -101,21 +118,24 @@ RayDerivative ray_derivative(const Beam &beam, const Ray &ray, const Mat3 &D,
     drde = (fwd - rev) * (1.0 / step);
   } else {
     // e1 = n / |n| with n = q0 x s0_unit, so de1 = (dn - e1 (e1 . dn)) / |n|.
-    Vec3 de1_unit = de1 - e1 * e1.dot(de1);
+    Vec3 du = de1 - e1 * e1.dot(de1);
     if (mode == AxisDerivative::analytic)
-      de1_unit = de1_unit / q0.cross(beam.unit_s0).norm();
-    drde = rotate_axis_derivative(ray.q, e1, ray.delpsi, de1_unit);
+      du = du / f.n_norm;
+    drde = du * f.e1_dot_q_versin + e1 * (du.dot(ray.q) * versin) +
+           du.cross(ray.q) * s;
   }
 
-  const Vec3 dpv = D * (dr + e1_r * ddelpsi + drde);
-  const double w_inv = 1.0 / ray.pv.z;
-  const double u_w_inv = ray.pv.x * w_inv;
-  const double v_w_inv = ray.pv.y * w_inv;
+  const Vec3 dpv = D * (dr + f.e1_r * ddelpsi + drde);
   RayDerivative out;
-  out.dx = w_inv * (dpv.x - dpv.z * u_w_inv);
-  out.dy = w_inv * (dpv.y - dpv.z * v_w_inv);
+  out.dx = f.w_inv * (dpv.x - dpv.z * f.u_w_inv);
+  out.dy = f.w_inv * (dpv.y - dpv.z * f.v_w_inv);
   out.ddelpsi = ddelpsi;
   return out;
+}
+
+RayDerivative ray_derivative(const Beam &beam, const Ray &ray, const Mat3 &D,
+                             const Vec3 &dq, AxisDerivative mode) {
+  return ray_derivative(beam, ray, ray_frame(beam, ray), D, dq, mode);
 }
 
 } // namespace mxi::stills

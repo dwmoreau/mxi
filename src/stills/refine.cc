@@ -137,9 +137,11 @@ public:
       const auto &h = spots_.miller[used_[k]];
       const Vec3 hv{static_cast<double>(h[0]), static_cast<double>(h[1]),
                     static_cast<double>(h[2])};
+      const RayFrame frame = ray_frame(beam_, rays_[k]);
       for (std::size_t c = 0; c < free.size(); ++c) {
-        const RayDerivative d = ray_derivative(
-            beam_, rays_[k], D_[k], dA[c] * hv, options_.axis_derivative);
+        const RayDerivative d =
+            ray_derivative(beam_, rays_[k], frame, D_[k], dA[c] * hv,
+                           options_.axis_derivative);
         jacobian_[(3 * k) * free.size() + c] = d.dx;
         jacobian_[(3 * k + 1) * free.size() + c] = d.dy;
         jacobian_[(3 * k + 2) * free.size() + c] = d.ddelpsi;
