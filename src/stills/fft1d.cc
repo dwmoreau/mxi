@@ -419,6 +419,18 @@ std::vector<Direction> construct_hemisphere_grid(double sampling) {
   return angles;
 }
 
+// The quick grid, whose sampling is a fixed setting, built once per thread
+// and kept.
+const std::vector<Direction> &quick_hemisphere_grid(double sampling) {
+  thread_local double kept_sampling = 0;
+  thread_local std::vector<Direction> kept;
+  if (kept.empty() || kept_sampling != sampling) {
+    kept = construct_hemisphere_grid(sampling);
+    kept_sampling = sampling;
+  }
+  return kept;
+}
+
 // flex.sort_permutation(kvals, reverse=True): stable, descending.
 std::vector<std::size_t> sort_by_kval(const std::vector<Direction> &d) {
   std::vector<std::size_t> perm(d.size());
@@ -684,8 +696,8 @@ std::vector<Vec3> fft1d_basis_vectors(const std::vector<Vec3> &rlp,
         (kPi * quick_grid * quick_grid) / (incr * incr);
     const std::size_t target_size = static_cast<std::size_t>(static_cast<int>(
         estimate_number_of_quick_grids / 2. / second_round_sampling));
-    const std::vector<Direction> quick_directions =
-        construct_hemisphere_grid(quick_grid);
+    const std::vector<Direction> &quick_directions =
+        quick_hemisphere_grid(quick_grid);
     n_quick = quick_directions.size();
     const std::vector<Direction> quick_sampling =
         simple_top_solutions(ai, quick_directions, target_size, 10.);
