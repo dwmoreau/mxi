@@ -518,14 +518,58 @@ restrict_to_quick_winners(const std::vector<Direction> &angles,
   auto cell = [quick_grid](double x) {
     return static_cast<long>(std::floor((x + 1.0) / quick_grid));
   };
+  // The grid hashed by cube: each cube's directions are consecutive in
+  // `members`, found through a hash table of (cube key, first, count).
   auto key = [](long ix, long iy, long iz) {
     return (ix * 4096 + iy) * 4096 + iz;
   };
-  std::map<long, std::vector<std::size_t>> buckets;
+  std::vector<long> keys(angles.size());
   for (std::size_t i = 0; i < angles.size(); ++i) {
     const Vec3 &p = angles[i].dvec;
-    buckets[key(cell(p[0]), cell(p[1]), cell(p[2]))].push_back(i);
+    keys[i] = key(cell(p[0]), cell(p[1]), cell(p[2]));
   }
+  std::vector<std::size_t> members(angles.size());
+  for (std::size_t i = 0; i < angles.size(); ++i)
+    members[i] = i;
+  std::stable_sort(members.begin(), members.end(),
+                   [&](std::size_t a, std::size_t b) {
+                     return keys[a] < keys[b];
+                   });
+  struct Cube {
+    long key;
+    std::size_t first, count;
+  };
+  std::vector<Cube> cubes;
+  for (std::size_t i = 0; i < members.size();) {
+    std::size_t j = i + 1;
+    while (j < members.size() && keys[members[j]] == keys[members[i]])
+      ++j;
+    cubes.push_back({keys[members[i]], i, j - i});
+    i = j;
+  }
+  std::size_t table_size = 16;
+  while (table_size < 2 * cubes.size())
+    table_size *= 2;
+  std::vector<std::size_t> table(table_size, cubes.size());
+  auto hash = [table_size](long k) {
+    return static_cast<std::size_t>(k * 0x9E3779B97F4A7C15ULL >> 20) &
+           (table_size - 1);
+  };
+  for (std::size_t c = 0; c < cubes.size(); ++c) {
+    std::size_t h = hash(cubes[c].key);
+    while (table[h] != cubes.size())
+      h = (h + 1) & (table_size - 1);
+    table[h] = c;
+  }
+  auto find_cube = [&](long k) -> const Cube * {
+    std::size_t h = hash(k);
+    while (table[h] != cubes.size()) {
+      if (cubes[table[h]].key == k)
+        return &cubes[table[h]];
+      h = (h + 1) & (table_size - 1);
+    }
+    return nullptr;
+  };
   std::vector<bool> accept(angles.size(), false);
   std::vector<std::pair<double, std::size_t>> near;
   for (const Vec3 &q : queries) {
@@ -534,10 +578,12 @@ restrict_to_quick_winners(const std::vector<Direction> &angles,
     for (long dx = -1; dx <= 1; ++dx)
       for (long dy = -1; dy <= 1; ++dy)
         for (long dz = -1; dz <= 1; ++dz) {
-          const auto it = buckets.find(key(cx + dx, cy + dy, cz + dz));
-          if (it == buckets.end())
+          const Cube *cube = find_cube(key(cx + dx, cy + dy, cz + dz));
+          if (!cube)
             continue;
-          for (std::size_t i : it->second) {
+          for (std::size_t s = cube->first; s < cube->first + cube->count;
+               ++s) {
+            const std::size_t i = members[s];
             const Vec3 &p = angles[i].dvec;
             double dist = 0;
             for (int c = 0; c < 3; ++c) {
