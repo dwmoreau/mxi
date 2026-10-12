@@ -51,8 +51,7 @@ template <> struct LaneElement<fftpack::FloatLanes> {
   using type = float;
 };
 template <class L> using Elem = typename LaneElement<L>::type;
-template <class L>
-constexpr std::size_t lanes_of = sizeof(L) / sizeof(Elem<L>);
+template <class L> constexpr std::size_t lanes_of = sizeof(L) / sizeof(Elem<L>);
 
 // Whether any lane of a vector comparison's result is set.
 template <class M> bool any_lane(const M &mask) {
@@ -188,8 +187,8 @@ public:
       Pending &g = pending_[slot];
       std::uint32_t *bins = g.bins.data() + g.count * n_;
       for (std::size_t k = 0; k < n_; ++k)
-        bins[k] = static_cast<std::uint32_t>(static_cast<int>(
-            ((projections_[k] - e.pmin) / e.delta_p) + 0.5));
+        bins[k] = static_cast<std::uint32_t>(
+            static_cast<int>(((projections_[k] - e.pmin) / e.delta_p) + 0.5));
       g.index[g.count] = i;
       g.extent[g.count] = e;
       if (++g.count == width)
@@ -544,10 +543,9 @@ restrict_to_quick_winners(const std::vector<Direction> &angles,
   std::vector<std::size_t> members(angles.size());
   for (std::size_t i = 0; i < angles.size(); ++i)
     members[i] = i;
-  std::stable_sort(members.begin(), members.end(),
-                   [&](std::size_t a, std::size_t b) {
-                     return keys[a] < keys[b];
-                   });
+  std::stable_sort(
+      members.begin(), members.end(),
+      [&](std::size_t a, std::size_t b) { return keys[a] < keys[b]; });
   struct Cube {
     long key;
     std::size_t first, count;

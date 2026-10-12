@@ -85,7 +85,9 @@ inline D2 cos_two_pi(D2 x) {
   const D2 a1 = pick(-1.0 / 6, -1.0 / 2);
   const D2 p =
       1.0 +
-      z * (a1 + z * (a2 + z * (a3 + z * (a4 + z * (a5 + z * (a6 + z * (a7 + z * a8)))))));
+      z * (a1 +
+           z * (a2 +
+                z * (a3 + z * (a4 + z * (a5 + z * (a6 + z * (a7 + z * a8)))))));
   const D2 v = odd ? y * p : p;
   return negate ? -v : v;
 }
