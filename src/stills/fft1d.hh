@@ -37,11 +37,26 @@ struct TooFewSpots : std::invalid_argument {
   using std::invalid_argument::invalid_argument;
 };
 
+// The search's grid. The defaults are rstbx's; any other value departs from
+// dials.
+struct Fft1dGrid {
+  // The coarsest grid (radians): it caps both the grid derived from the data
+  // and the grid searched.
+  double max_grid = 0.029;
+  // The adaptive search's first pass (radians), taken when the grid is this
+  // fine or finer.
+  double quick_grid = 0.016;
+  // Refinement stops at characteristic_grid / refine_divisor.
+  double refine_divisor = 100.;
+};
+
 // What a search did, for comparing it with rstbx step by step.
 struct Fft1dTrace {
   double characteristic_grid = 0, incr = 0;
   bool adaptive = false;
   std::size_t n_quick = 0, n_quick_winners = 0, n_directions = 0;
+  // Wall seconds: the adaptive first pass, the grid scan, the refinement.
+  double seconds_quick = 0, seconds_scan = 0, seconds_refine = 0;
   // The directions before refinement: kval, uc_length, dvec.
   std::vector<std::array<double, 5>> unrefined;
   // After refinement, before setSolutions.
@@ -55,7 +70,8 @@ struct Fft1dTrace {
 std::vector<Vec3>
 fft1d_basis_vectors(const std::vector<Vec3> &rlp, double max_cell,
                     std::optional<double> characteristic_grid = std::nullopt,
-                    Fft1dTrace *trace = nullptr);
+                    Fft1dTrace *trace = nullptr,
+                    const Fft1dGrid &settings = {});
 
 // rstbx's SimpleSamplerTool.construct_hemisphere_grid(sampling): the
 // directions (as unit vectors) in its order.

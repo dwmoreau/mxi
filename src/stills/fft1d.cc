@@ -10,6 +10,7 @@
 #include "stills/fft1d.hh"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <complex>
 #include <map>
@@ -410,7 +411,8 @@ std::vector<Vec3> hemisphere_grid(double sampling) {
 std::vector<Vec3> fft1d_basis_vectors(const std::vector<Vec3> &rlp,
                                       double max_cell,
                                       std::optional<double> characteristic_grid,
-                                      Fft1dTrace *trace) {
+                                      Fft1dTrace *trace,
+                                      const Fft1dGrid &settings) {
   if (!(rlp.size() > 7))
     throw TooFewSpots("fft1d needs more than 7 reciprocal lattice points");
 
@@ -419,7 +421,7 @@ std::vector<Vec3> fft1d_basis_vectors(const std::vector<Vec3> &rlp,
   if (characteristic_grid) {
     cg = *characteristic_grid;
   } else {
-    const double rossmann_suggestion = 0.029;
+    const double rossmann_suggestion = settings.max_grid;
     double max_norm = length(rlp[0]);
     for (const Vec3 &v : rlp)
       max_norm = std::max(max_norm, length(v));
@@ -432,7 +434,12 @@ std::vector<Vec3> fft1d_basis_vectors(const std::vector<Vec3> &rlp,
 
   // hemisphere_shortcut: HemisphereSampler(max_grid=0.029,
   // characteristic_grid=cg, quick_grid=0.016).hemisphere(ai, max_cell, 30, 4).
-  const double max_grid = 0.029, quick_grid = 0.016;
+  using Clock = std::chrono::steady_clock;
+  const auto seconds = [](Clock::time_point a, Clock::time_point b) {
+    return std::chrono::duration<double>(b - a).count();
+  };
+  const auto t0 = Clock::now();
+  const double max_grid = settings.max_grid, quick_grid = settings.quick_grid;
   const double incr = std::min(max_grid, cg);
   std::vector<Direction> angles;
   bool adaptive = false;
@@ -457,13 +464,19 @@ std::vector<Vec3> fft1d_basis_vectors(const std::vector<Vec3> &rlp,
   } else {
     angles = construct_hemisphere_grid(incr);
   }
+  const auto t1 = Clock::now();
   const std::vector<Direction> unrefined =
       hemisphere_top_solutions(ai, angles, 30, 4., max_cell);
+  const auto t2 = Clock::now();
   std::vector<Direction> refined;
-  const double final_target_grid = cg / 100.;
+  const double final_target_grid = cg / settings.refine_divisor;
   for (const Direction &item : unrefined)
     refined.push_back(ai.refine_direction(item, incr, final_target_grid));
+  const auto t3 = Clock::now();
   if (trace) {
+    trace->seconds_quick = seconds(t0, t1);
+    trace->seconds_scan = seconds(t1, t2);
+    trace->seconds_refine = seconds(t2, t3);
     trace->characteristic_grid = cg;
     trace->incr = incr;
     trace->adaptive = adaptive;

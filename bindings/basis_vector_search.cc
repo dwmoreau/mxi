@@ -52,11 +52,12 @@ void bind_basis_vector_search(py::module_ &m) {
   m.def(
       "fft1d_basis_vectors",
       [](const Array &rlp, double max_cell,
-         std::optional<double> characteristic_grid, bool trace) -> py::object {
+         std::optional<double> characteristic_grid, bool trace, double max_grid,
+         double quick_grid, double refine_divisor) -> py::object {
         Fft1dTrace t;
-        const auto v =
-            fft1d_basis_vectors(vectors_from(rlp, "rlp"), max_cell,
-                                characteristic_grid, trace ? &t : nullptr);
+        const auto v = fft1d_basis_vectors(
+            vectors_from(rlp, "rlp"), max_cell, characteristic_grid,
+            trace ? &t : nullptr, {max_grid, quick_grid, refine_divisor});
         if (!trace)
           return vectors_array(v);
         py::dict d;
@@ -66,16 +67,23 @@ void bind_basis_vector_search(py::module_ &m) {
         d["n_quick"] = t.n_quick;
         d["n_quick_winners"] = t.n_quick_winners;
         d["n_directions"] = t.n_directions;
+        d["seconds_quick"] = t.seconds_quick;
+        d["seconds_scan"] = t.seconds_scan;
+        d["seconds_refine"] = t.seconds_refine;
         d["unrefined"] = rows_array(t.unrefined);
         d["refined"] = rows_array(t.refined);
         return py::make_tuple(vectors_array(v), d);
       },
       py::arg("rlp"), py::arg("max_cell"),
       py::arg("characteristic_grid") = py::none(), py::arg("trace") = false,
+      py::arg("max_grid") = Fft1dGrid{}.max_grid,
+      py::arg("quick_grid") = Fft1dGrid{}.quick_grid,
+      py::arg("refine_divisor") = Fft1dGrid{}.refine_divisor,
       "dials' FFT1D.find_basis_vectors: the basis vectors (n, 3), strongest "
       "first. With trace, also the intermediate steps: the grid, the "
-      "directions searched, and (kval, length, direction) before and after "
-      "refinement.");
+      "directions searched, (kval, length, direction) before and after "
+      "refinement, and the seconds of each stage. max_grid, quick_grid and "
+      "refine_divisor set the grid; their defaults are rstbx's.");
 
   py::class_<RealSpaceGridSearch>(m, "RealSpaceGridSearch")
       .def(py::init([](const std::array<double, 6> &cell,

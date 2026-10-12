@@ -29,6 +29,23 @@ def test_fft1d_trace():
     assert not trace["adaptive"]
     assert trace["n_directions"] == len(mxi_stills.hemisphere_grid(trace["incr"]))
     assert trace["refined"].shape == (len(trace["unrefined"]), 5)
+    assert all(trace[k] >= 0 for k in ("seconds_quick", "seconds_scan", "seconds_refine"))
+
+
+def test_fft1d_grid_settings():
+    # rstbx's grid is the default. The data would allow 0.07 rad here, so a
+    # coarser max_grid searches fewer directions and still finds the 10 A axis.
+    rlp = lattice_rlp()
+    default = mxi_stills.fft1d_basis_vectors(rlp, 60.0)
+    same = mxi_stills.fft1d_basis_vectors(rlp, 60.0, max_grid=0.029, quick_grid=0.016,
+                                          refine_divisor=100.0)
+    assert np.array_equal(default, same)
+    v, trace = mxi_stills.fft1d_basis_vectors(rlp, 60.0, trace=True)
+    assert trace["characteristic_grid"] == trace["incr"] == 0.029
+    v, trace = mxi_stills.fft1d_basis_vectors(rlp, 60.0, trace=True, max_grid=0.05)
+    assert trace["incr"] == 0.05
+    assert trace["n_directions"] == len(mxi_stills.hemisphere_grid(0.05))
+    assert np.isclose(np.linalg.norm(v[0]), 10, rtol=0.02)
 
 
 def test_fft1d_refuses_seven_spots():
