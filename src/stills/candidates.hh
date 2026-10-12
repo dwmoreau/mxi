@@ -11,11 +11,29 @@
 
 #include <array>
 #include <cstddef>
+#include <optional>
 #include <vector>
 
 #include "stills/cell.hh"
 
 namespace mxi::stills {
+
+// dials' candidate_orientation_matrices as the generator it is: each call to
+// next() does only the work needed to yield the next candidate, so a Niggli
+// reduction that would fail on a later triplet is never reached by a caller
+// that stops early.
+class CandidateStream {
+public:
+  explicit CandidateStream(std::vector<Vec3> basis_vectors);
+  // The next candidate, or nothing once the triplets are exhausted. Throws
+  // NiggliLimitExceeded as dials raises DialsIndexError.
+  std::optional<CrystalModel> next();
+
+private:
+  std::vector<Vec3> basis_vectors_;
+  std::vector<std::array<int, 3>> triplets_;
+  std::size_t next_ = 0;
+};
 
 // Every triplet (i < j < k) of the first 100 vectors, ordered by
 // i^2 + j^2 + k^2 (stable), that passes the 20 degree angle tests, made

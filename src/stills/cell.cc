@@ -164,19 +164,34 @@ CrystalModel CrystalModel::from_real_space(const Vec3 &a, const Vec3 &b,
   return x;
 }
 
+namespace {
+
+// set_B: the cell of crystal_orientation(B, reciprocal), from the rows of the
+// direct matrix B^-1, and B again as that cell's fractionalisation matrix.
+void set_B(CrystalModel *x, const Mat3 &B) {
+  const Mat3 direct = inverse_scitbx(B);
+  const Vec3 p0 = direct.row(0), p1 = direct.row(1), p2 = direct.row(2);
+  x->cell = UnitCell::from_metric(
+      {p0.dot(p0), p1.dot(p1), p2.dot(p2), p0.dot(p1), p2.dot(p0), p1.dot(p2)});
+  x->B = x->cell.frac.transpose();
+}
+
+} // namespace
+
 CrystalModel CrystalModel::from_A(const Mat3 &A) {
   const UnitCell uc =
       UnitCell::from_orthogonalisation(inverse_scitbx(A.transpose()));
   const Mat3 B = uc.frac.transpose();
   CrystalModel x;
   x.U = A * inverse_scitbx(B);
-  // set_B: the cell of crystal_orientation(B, reciprocal), from the rows of
-  // the direct matrix B^-1.
-  const Mat3 direct = inverse_scitbx(B);
-  const Vec3 p0 = direct.row(0), p1 = direct.row(1), p2 = direct.row(2);
-  x.cell = UnitCell::from_metric(
-      {p0.dot(p0), p1.dot(p1), p2.dot(p2), p0.dot(p1), p2.dot(p0), p1.dot(p2)});
-  x.B = x.cell.frac.transpose();
+  set_B(&x, B);
+  return x;
+}
+
+CrystalModel CrystalModel::from_U_B(const Mat3 &U, const Mat3 &B) {
+  CrystalModel x;
+  x.U = U;
+  set_B(&x, B);
   return x;
 }
 

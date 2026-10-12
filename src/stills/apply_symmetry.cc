@@ -337,7 +337,9 @@ SymmetryHandler::SymmetryHandler(const std::optional<UnitCell> &unit_cell,
     reference_group_ = ref.group;
     cb_op_inp_best_ = ref.change_of_basis_op_to_best_cell() * cb_op_inp_ref_;
     const ChangeOfBasisOp ref_to_primitive = ref.group.z2p_op();
-    primitive_group = ref.change_basis(ref_to_primitive).group;
+    const CrystalSymmetry primitive = ref.change_basis(ref_to_primitive);
+    primitive_group = primitive.group;
+    primitive_cell_ = primitive.cell;
   } else if (target_space_group) {
     SpaceGroup g = *target_space_group;
     g.make_tidy();

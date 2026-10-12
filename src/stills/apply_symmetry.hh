@@ -80,6 +80,11 @@ public:
     return reference_group_;
   }
   const std::string &target_bravais() const { return target_bravais_; }
+  // The target cell in its primitive setting (target_symmetry_primitive), set
+  // when a cell is given: what max_cell and the grid search are taken from.
+  const std::optional<UnitCell> &primitive_cell() const {
+    return primitive_cell_;
+  }
   KnownSymmetry known_symmetry(double relative_length_tolerance,
                                double absolute_angle_tolerance,
                                double max_delta) const;
@@ -100,6 +105,7 @@ private:
   std::optional<UnitCell> inp_cell_;
   std::optional<sgtbx::SpaceGroup> inp_group_;
   std::optional<UnitCell> reference_cell_;
+  std::optional<UnitCell> primitive_cell_;
   std::optional<sgtbx::SpaceGroup> reference_group_;
   sgtbx::ChangeOfBasisOp cb_op_inp_ref_, cb_op_ref_inp_;
   std::optional<sgtbx::ChangeOfBasisOp> cb_op_inp_best_;

@@ -72,14 +72,22 @@ library. The module wraps it with pybind11 (`bindings/`).
 - **The method fallback** (`src/stills/method_list.hh`).
   `index_with_method_list` tries `indexing.stills.method_list` in order, as
   stills_process does.
-- **The entry point** (`src/stills/index.hh`). `index_still` maps the spots and
-  returns "not indexed", because there is no search yet.
+- **The indexer** (`src/stills/indexer.hh`). `StillsIndexer` is dials' stills
+  indexer for one lattice, built once per process for a detector and a target
+  symmetry: the search, the candidates as dials' generators yield them, each
+  candidate's refinement, outlier rejection and Nave fits, the choice by RMSD,
+  the re-indexing, the post-index refinement and the volume check, through the
+  method fallback. `index` returns the crystal, its Nave model and the refined
+  reflections, or the message dials would fail the still with, and a trace of
+  every candidate.
 - **The Python side** (`bindings/mxi_stills/dxtbx_adapter.py`). It builds the
-  arrays from live dxtbx models and keeps the C++ detector between stills. Panel
+  arrays from live dxtbx models and keeps the C++ detector and indexer between
+  stills. Panel
   vectors come from the live panel, never from an `.expt`, which stores them in
   the panel's local frame. Parallax coefficients come from the panel's px/mm
   strategy.
-- **In dials.stills_process**, `indexing.stills.backend=mxi` selects it.
+- **In dials.stills_process**, `indexing.stills.backend=mxi` selects it, and
+  builds dials' indexed experiment and reflection table from the result.
 
 The tests in `tests/stills/` (`mxi_stills_tests`) check the geometry against
 dials' own values for real spots on detectors of 256, 32, 8 and 1 panels, and
@@ -87,11 +95,13 @@ the refinement against dials' own runs on real stills in five space groups,
 the outlier rejection and Nave fit against dials' own calls, and the cell
 reduction, candidates and index assignment, the space-group types, the
 known-symmetry filter, apply_symmetry and both basis-vector searches against
-cctbx's and dials' own results, and the method fallback against stub searches. Those values are
+cctbx's and dials' own results, the method fallback against stub searches, and
+the whole indexer against dials' result on two real stills. Those values are
 in `tests/stills/real_stills.hh`, `tests/stills/real_refine.hh`,
 `tests/stills/real_outliers.hh`, `tests/stills/real_candidates.hh` and
-`tests/stills/real_symmetry.hh`, `tests/stills/real_fft1d.hh` and
-`tests/stills/real_rsgs.hh`, which are generated.
+`tests/stills/real_symmetry.hh`, `tests/stills/real_fft1d.hh`,
+`tests/stills/real_rsgs.hh` and `tests/stills/real_frames.hh`, which are
+generated.
 
 ## Building
 

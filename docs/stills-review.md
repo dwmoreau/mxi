@@ -11,6 +11,7 @@ reason: a measured cost, with the run that measured it, or a stated weakness of 
 | 2 | 2026-10-11 | No detector parameterisation is built, so the panel frames are not recomposed on every refinement | dials builds a hierarchical detector parameterisation on every refiner build, whose `compose()` rewrites the copied panels at about 1e-12 mm and is written back to the experiment (spec 9.2) | The detector is fixed on every configuration (STATUS 3, decided 2026-10-10); the parameterisation exists only to be discarded | None resolvable here: on 5,186 captured runs the starting objective and RMSDs agree with dials to 4.4e-12 relative |
 | 3 | 2026-10-11 | d-spacings, 2-theta and the cell volume for the Nave fit come from B: d = 1/\|Bh\|, V = 1/det B | dials takes them from cctbx's unit cell, rebuilt from the crystal's parameters (`crystal.get_unit_cell().d()`, `.two_theta()`, `.volume()`) | No cctbx in the C++; the unit-cell object exists only to answer these three questions | On the 2,403 single-crystal Nave fits of the R7 replay: d within 7.3e-16 relative and the volume within 7.0e-16; every outcome and every acceptance flag the same as dials'. The 2-theta order (ties between reflections of equal spacing) differs in 59 fits, none of them among the 13 below. alpha and eta agree within 1e-6 relative on 2,204 of the 2,217 fits that complete; the other 13 take the same L-BFGS path, with the same iteration and call counts, to points up to 4.5e-4 apart (eta, one psii fit) whose objectives agree to 3.8e-9 relative: a flat direction of the likelihood, the same class as the refinement replay's flat valley |
 | 4 | 2026-10-11 | Where serialtbx's Nave likelihood would overflow (`exp(B (psi +- psi_model)) > 1e100`), the same likelihood and gradient are evaluated in log-sum-exp form (`NaveOptions::safe_likelihood`, default on) | serialtbx `max_like.py:117-122` raises "Model has diverged", which fails the candidate, or the frame after indexing | The model does not diverge, the evaluation does: on the corpus all 25 such fits fail at a line-search trial point 3-6 evaluations in, after a first step from a mis-sized seed to a band 23-64 times too narrow; the exception stops the search from stepping back. dials' gradient is the true derivative (central differences, 5.5e-7), so the form is the same function | Replay: every fit that completes in dials completes bit-identically; all 25 converge (5-10 iterations) and pass the Ewald limit. End to end (`runs/r7-nave-fixes/`, against pr23_B): +6 cytochrome and +22 lysozyme frames integrated, none lost, 3 frames on another lattice; merged CC1/2 +0.0013 +- 0.0013 (cytochrome) and +0.0013 +- 0.0011 (lysozyme), paired over six CC1/2 splits; merged <I/sigma> +0.008 and +0.003 |
+| 5 | 2026-10-12 | One lattice per still | dials' stills indexer searches the unindexed spots again for up to `max_lattices` crystals (psii's phil: 3) and refines them together | Multiple lattices are later scope (R12); every configuration but psii's has one | Corpus replay (R9): psii's 3 frames that index more than one crystal in dials get only the first, and its model differs from dials' (0.005-0.07 degrees), since dials refines it jointly with the others; their integrated reflections fall from 6,784 / 12,182 / 8,615 to 1,851 / 6,482 / 3,962. No other frame is affected |
 
 ## What follows dials exactly
 
@@ -191,12 +192,43 @@ order, bit-identical. With both of dials' searches replaced by these, stills_pro
 same output on all five datasets, both as the fallback and as the only method. Evidence:
 `stills_process_profiling/claude/rewrite/runs/r8c-rsgs/` and `runs/r8-methods/`.
 
+**The indexer** (`src/stills/indexer`). dials' `StillsIndexer.index` for one lattice, as
+stills_process runs it: the search on the spots beyond `d_min_start`, and without it `d_min` set
+to the highest-resolution spot searched; the candidates and the known-symmetry filter pulled one
+at a time, as dials' generators are, so that a sixth candidate is made before the `max_refine`
+stop and nothing after it is; per candidate the index assignment, on the known-symmetry path
+`apply_symmetry` and the change of basis (an error there ends the method, as it lies outside
+dials' `try`), then Sauter-Poon after refinement A, refinement B from the candidate, Sauter-Poon
+after refinement C from B, Nave on B, the spots both keep, refinement D from B and Nave on D, on
+the P1 path the check that D still has the target's lattice symmetry, and the RMSD in pixels; the
+lowest RMSD, ties to the earlier candidate, against the 2 px threshold; every spot re-indexed with
+it, and on the P1 path put into the target's symmetry with the user's space group; the same chain
+on those spots; the volume check. Each refined crystal is stored as dxtbx's `set_B` stores it,
+through the cell. Failures carry dials' messages. Corpus replay (`stills_process_profiling/claude/
+rewrite/runs/r9-assemble/`, 332 frames that reach indexing, the faithful configuration): every
+outcome and every failure's class the same as dials'; the crystal within 1e-4 degrees and 1e-6 in
+each cell parameter on all but 5 of the 179 frames both index (psii's 3 multi-lattice frames, row 5,
+and 2 cytochrome ties, below); end to end through stills_process, the same funnel on all 450
+corpus frames.
+
 **The method fallback** (`src/stills/method_list.hh`). stills_process's `method_list`: each
 method's indexer is set up outside the error handling, so an error there ends the attempt; an
 error from the search is kept and the next method tried; the first success is the result; the
 last error is rethrown. Checked with stub searches (tests/stills).
 
 Not yet departures, but named as candidates:
+- **Ties between equivalent settings.** fft1d and the grid search often yield the same lattice
+  in several settings, and each refines to the same RMSD within ~1e-6 px (5 of 5 candidates on
+  some lysozyme stills), so which is chosen is decided by where each refinement stopped, in dials
+  as here. On most lattices it does not matter: the settings differ by permutations and sign
+  changes of the axes, which leave the 0.3 index tolerance on |h - round(h)|^2 unchanged, so the
+  same spots index and only their labels differ. On a hexagonal lattice the settings differ by
+  the six-fold written in the hexagonal basis, which changes |h - round(h)|^2: on two
+  cytochrome stills of the corpus replay the C++ chose another of dials' tied candidates
+  (1e-7 to 6e-7 degrees apart) and the re-indexing took 81 spots where dials took 82, and 52
+  where it took 48 (one spot at |h - round(h)|^2 = 0.085 in one setting and 0.164 in the other),
+  and the final crystals ended 0.003 and 0.02 degrees apart. Breaking the tie on the setting
+  rather than the RMSD would make the choice reproducible.
 - **The rotation-axis derivative.** dials' `drde` moves the unit axis e1 along the part of
   dq0 x s0 perpendicular to it; the derivative of e1 = normalise(q0 x s0) divides that by
   |q0 x s0|. Against a central difference of the whole prediction, dials' form is off by up to

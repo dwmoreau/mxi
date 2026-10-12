@@ -69,6 +69,10 @@ struct CrystalModel {
                                       const Vec3 &c);
   // dxtbx's Crystal::set_A, which sets B through crystal_orientation.
   static CrystalModel from_A(const Mat3 &A);
+  // dxtbx's set_U(U) and set_B(B): B is stored as the fractionalisation
+  // matrix of the cell it describes, so it can differ from the B given in
+  // the last bits.
+  static CrystalModel from_U_B(const Mat3 &U, const Mat3 &B);
 
   // dxtbx's change_basis: A' = A M, where M is the transpose of the change of
   // basis's rotation part, here passed already transposed.

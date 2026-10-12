@@ -106,7 +106,7 @@ def test_the_workspace_rebuilds_only_on_change():
     assert not np.array_equal(first["rlp"], moved["rlp"])
 
 
-def test_mapping_shapes_and_the_stub():
+def test_mapping_shapes():
     ws = Workspace()
     out = ws.map_spots(Experiment(two_panels()), spots())
     for key in ("xyzobs.mm.value", "xyzobs.mm.variance", "s1", "rlp"):
@@ -114,8 +114,29 @@ def test_mapping_shapes_and_the_stub():
     assert (out["xyzobs.mm.value"][:, 2] == 0).all()
     # The simple panel is a plain multiplication by the pixel size.
     assert out["xyzobs.mm.value"][1, 0] == 300.0 * 0.075
+
+
+def test_three_spots_do_not_index():
+    ws = Workspace(
+        indexer_settings={
+            "unit_cell": (78.0, 78.0, 37.0, 90.0, 90.0, 90.0),
+            "space_group_hall": " P 4nw 2abw",
+            "methods": ["fft1d", "real_space_grid_search"],
+        }
+    )
     result = ws.index(Experiment(two_panels()), spots())
-    assert not result.indexed and result.reason and result.n_spots == 3
+    assert not result["indexed"]
+    assert [m["method"] for m in result["methods"]] == [
+        "fft1d",
+        "real_space_grid_search",
+    ]
+    assert result["rlp"].shape == (3, 3)
+    assert ws.indexer.max_cell == pytest.approx(1.3 * 78.0)
+
+
+def test_index_needs_settings():
+    with pytest.raises(ValueError, match="no indexer settings"):
+        Workspace().index(Experiment(two_panels()), spots())
 
 
 def test_a_panel_past_the_end_is_refused():

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <utility>
 
 #include "stills/reduction.hh"
 
@@ -27,30 +28,30 @@ int iround(double x) {
 
 } // namespace
 
-std::vector<CrystalModel>
-candidate_orientation_matrices(const std::vector<Vec3> &basis_vectors) {
-  std::vector<CrystalModel> out;
+CandidateStream::CandidateStream(std::vector<Vec3> basis_vectors)
+    : basis_vectors_(std::move(basis_vectors)) {
   const int n =
-      static_cast<int>(std::min<std::size_t>(basis_vectors.size(), 100));
+      static_cast<int>(std::min<std::size_t>(basis_vectors_.size(), 100));
   if (n < 3)
-    return out;
-
-  std::vector<std::array<int, 3>> triplets;
+    return;
   for (int i = 0; i < n; ++i)
     for (int j = i + 1; j < n; ++j)
       for (int k = j + 1; k < n; ++k)
-        triplets.push_back({i, j, k});
-  std::stable_sort(triplets.begin(), triplets.end(),
+        triplets_.push_back({i, j, k});
+  std::stable_sort(triplets_.begin(), triplets_.end(),
                    [](const auto &x, const auto &y) {
                      return x[0] * x[0] + x[1] * x[1] + x[2] * x[2] <
                             y[0] * y[0] + y[1] * y[1] + y[2] * y[2];
                    });
+}
 
+std::optional<CrystalModel> CandidateStream::next() {
   const double half_pi = 0.5 * M_PI;
   const double min_angle = 20. / 180. * M_PI;
-  for (const auto &t : triplets) {
-    Vec3 a = basis_vectors[t[0]], b = basis_vectors[t[1]],
-         c = basis_vectors[t[2]];
+  while (next_ < triplets_.size()) {
+    const auto &t = triplets_[next_++];
+    Vec3 a = basis_vectors_[t[0]], b = basis_vectors_[t[1]],
+         c = basis_vectors_[t[2]];
     const double a_ns = a.dot(a), b_ns = b.dot(b), c_ns = c.dot(c);
 
     const double angle_ab = clipped_angle(a.dot(b), a_ns * b_ns);
@@ -79,8 +80,17 @@ candidate_orientation_matrices(const std::vector<Vec3> &basis_vectors) {
         niggli_change_of_basis(niggli_reduction(model.cell)));
     const auto &p = reduced.cell.params;
     if (reduced.cell.volume > (p[0] * p[1] * p[2] / 100))
-      out.push_back(reduced);
+      return reduced;
   }
+  return std::nullopt;
+}
+
+std::vector<CrystalModel>
+candidate_orientation_matrices(const std::vector<Vec3> &basis_vectors) {
+  std::vector<CrystalModel> out;
+  CandidateStream stream(basis_vectors);
+  while (auto model = stream.next())
+    out.push_back(*model);
   return out;
 }
 

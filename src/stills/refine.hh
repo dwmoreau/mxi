@@ -128,5 +128,10 @@ RefineResult refine_crystal(const StillsDetector &detector, const Vec3 &s0,
                             const Mat3 &U, const Mat3 &B,
                             const std::string &hall, const IndexedSpots &spots,
                             const RefineOptions &options = {});
+RefineResult refine_crystal(const StillsDetector &detector, const Vec3 &s0,
+                            const Mat3 &U, const Mat3 &B,
+                            const CellConstraint &constraint,
+                            const IndexedSpots &spots,
+                            const RefineOptions &options = {});
 
 } // namespace mxi::stills

@@ -7,7 +7,6 @@
 #include "check.hh"
 #include "real_stills.hh"
 #include "stills/geometry.hh"
-#include "stills/index.hh"
 
 using namespace mxi::stills;
 
@@ -160,14 +159,4 @@ TEST(stills_geometry_refuses_bad_input) {
     p.mu = 0.0;
   check::is_true(refuses(zero_mu, r, spots_of(r)),
                  "parallax with mu = 0 is refused");
-}
-
-TEST(stills_index_stub_returns_not_indexed) {
-  const auto r = real_stills::real_cytochrome();
-  const IndexResult result =
-      index_still(detector_of(r, false, true), r.s0, r.wavelength, spots_of(r));
-  check::is_true(result.status == IndexStatus::not_indexed, "not indexed");
-  check::is_true(!result.reason.empty(), "with a reason");
-  check::equal(static_cast<long long>(result.n_spots),
-               static_cast<long long>(r.spots.size()), "every spot mapped");
 }

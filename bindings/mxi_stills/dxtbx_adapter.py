@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ._mxi_stills import Detector, index_still, map_spots
+from ._mxi_stills import Detector, StillsIndexer, map_spots
 
 SUPPORTED_STRATEGIES = ("SimplePxMmStrategy", "ParallaxCorrectedPxMmStrategy")
 
@@ -63,16 +63,26 @@ def reflection_arrays(reflections):
     return panel, xyz, var
 
 
-class Workspace:
-    """The C++ detector, kept between stills.
+def flag_array(reflections):
+    """The flags column as uint64, zero for a table without one."""
+    if "flags" in reflections:
+        return np.asarray(reflections["flags"], dtype=np.uint64)
+    return np.zeros(len(reflections), dtype=np.uint64)
 
-    It is rebuilt only when the live detector's arrays change, which for a
+
+class Workspace:
+    """The C++ detector and indexer, kept between stills.
+
+    Both are rebuilt only when the live detector's arrays change, which for a
     process using a reference geometry is never after the first still.
+    ``indexer_settings`` are StillsIndexer's keyword arguments.
     """
 
-    def __init__(self):
+    def __init__(self, indexer_settings=None):
         self._arrays = None
+        self._indexer_settings = indexer_settings
         self.detector = None
+        self.indexer = None
         self.n_builds = 0
 
     def update(self, dxtbx_detector):
@@ -82,6 +92,7 @@ class Workspace:
         ):
             self.detector = Detector(**arrays)
             self._arrays = arrays
+            self.indexer = None
             self.n_builds += 1
         return self.detector
 
@@ -97,11 +108,16 @@ class Workspace:
         )
 
     def index(self, experiment, reflections):
+        """StillsIndexer.index on one still's strong spots."""
         detector = self.update(experiment.detector)
+        if self.indexer is None:
+            if self._indexer_settings is None:
+                raise ValueError("Workspace: no indexer settings")
+            self.indexer = StillsIndexer(detector, **self._indexer_settings)
         beam = experiment.beam
-        return index_still(
-            detector,
+        return self.indexer.index(
             np.asarray(beam.get_s0()),
             beam.get_wavelength(),
             *reflection_arrays(reflections),
+            flag_array(reflections),
         )

@@ -381,6 +381,15 @@ RefineResult refine_crystal(const StillsDetector &detector, const Vec3 &s0,
                             const Mat3 &U, const Mat3 &B,
                             const std::string &hall, const IndexedSpots &spots,
                             const RefineOptions &options) {
+  return refine_crystal(detector, s0, U, B, CellConstraint::from_hall(hall),
+                        spots, options);
+}
+
+RefineResult refine_crystal(const StillsDetector &detector, const Vec3 &s0,
+                            const Mat3 &U, const Mat3 &B,
+                            const CellConstraint &constraint,
+                            const IndexedSpots &spots,
+                            const RefineOptions &options) {
   RefineResult result;
   result.U = U;
   result.B = B;
@@ -393,7 +402,6 @@ RefineResult refine_crystal(const StillsDetector &detector, const Vec3 &s0,
     return result;
   }
 
-  const CellConstraint constraint = CellConstraint::from_hall(hall);
   const std::size_t n_param = 3 + constraint.size();
   result.parameter_names = parameter_names(constraint);
   std::vector<double> x = start_parameters(constraint, B);

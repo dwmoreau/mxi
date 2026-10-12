@@ -14,7 +14,6 @@
 #include "stills/candidates.hh"
 #include "stills/cell.hh"
 #include "stills/geometry.hh"
-#include "stills/index.hh"
 #include "stills/nave.hh"
 #include "stills/outliers.hh"
 #include "stills/reduction.hh"
@@ -268,6 +267,7 @@ std::vector<std::array<int, 3>> miller_of(const IndexArray &miller) {
 
 void bind_known_symmetry(py::module_ &m);
 void bind_basis_vector_search(py::module_ &m);
+void bind_indexer(py::module_ &m);
 
 PYBIND11_MODULE(_mxi_stills, m) {
   m.doc() = "mxi stills indexing for dials.stills_process";
@@ -308,23 +308,6 @@ PYBIND11_MODULE(_mxi_stills, m) {
       "Map spot centroids to millimetres, s1 and the reciprocal lattice "
       "point, as dials' centroid_px_to_mm and "
       "map_centroids_to_reciprocal_space do for a still.");
-
-  py::class_<IndexResult>(m, "IndexResult")
-      .def_property_readonly(
-          "indexed",
-          [](const IndexResult &r) { return r.status == IndexStatus::indexed; })
-      .def_readonly("reason", &IndexResult::reason)
-      .def_readonly("n_spots", &IndexResult::n_spots);
-
-  m.def(
-      "index_still",
-      [](const StillsDetector &detector, const Array &s0, double wavelength,
-         const IndexArray &panel, const Array &xyz_px, const Array &var_px) {
-        const Spots spots = make_spots(panel, xyz_px, var_px);
-        return index_still(detector, vec3(s0, "s0"), wavelength, spots);
-      },
-      py::arg("detector"), py::arg("s0"), py::arg("wavelength"),
-      py::arg("panel"), py::arg("xyz_px"), py::arg("var_px"));
 
   m.def(
       "refine_still",
@@ -629,4 +612,5 @@ PYBIND11_MODULE(_mxi_stills, m) {
 
   bind_known_symmetry(m);
   bind_basis_vector_search(m);
+  bind_indexer(m);
 }
