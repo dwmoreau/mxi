@@ -12,9 +12,17 @@
 // cctbx_project rstbx/dps_core/lepage.py, rstbx/symmetry/subgroup.py,
 // cctbx/sgtbx/lattice_symmetry.py (metric_subgroups),
 // rstbx/dps_core/constrainment.py and cctbx/uctbx/crystal_orientation.cpp.
-// cctbx Copyright (c) 2006 - 2026, The Regents of the University of
-// California, through Lawrence Berkeley National Laboratory. BSD-3-Clause-LBNL;
-// see third_party/cctbx/LICENSE.txt.
+// Derived from dials, cctbx_project (cctbx, rstbx, scitbx) and dxtbx.
+// dials: Copyright (c) 2012 Diamond Light Source, Lawrence Berkeley National
+// Laboratory, United Kingdom Research and Innovation, and contributors. All
+// rights reserved. BSD-3-Clause; see third_party/dials/LICENSE.
+// cctbx: Copyright (c) 2006 - 2026, The Regents of the University of
+// California, through Lawrence Berkeley National Laboratory (subject to receipt
+// of any required approvals from the U.S. Dept. of Energy). All rights
+// reserved. BSD-3-Clause-LBNL; see third_party/cctbx/LICENSE.txt.
+// dxtbx: Copyright (c) 2019 Diamond Light Source, Lawrence Berkeley National
+// Laboratory and the Science and Technology Facilities Council. All rights
+// reserved. BSD-3-Clause; see third_party/dxtbx/LICENSE.txt.
 
 #pragma once
 

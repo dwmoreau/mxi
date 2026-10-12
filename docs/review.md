@@ -27,7 +27,10 @@ Its dependencies: HDF5, with bitshuffle and LZ4 vendored for the Eiger's
 compression; gemmi for space groups (MPL 2.0, a submodule, unmodified); FFTW
 optionally for indexing's transform (GPL, off by default -- the default build
 uses a built-in radix-2); CUDA or Metal optionally for the spot finder. The
-package is BSD 3-clause.
+package is BSD 3-clause. The stills library (`src/stills/`) follows dials, dxtbx and cctbx
+closely enough to be derived from them, so its files carry those projects'
+copyright notices, and their BSD licences are in `third_party/dials`,
+`third_party/dxtbx` and `third_party/cctbx`.
 
 **How it was written.** Every commit is authored by Graeme Winter with Claude
 (Anthropic) as co-author, and says so. The direction, the data and the decisions

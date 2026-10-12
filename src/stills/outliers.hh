@@ -17,6 +17,15 @@
 //           empirical CDF contains the curve's value, and which lies beyond
 //           the curve, with spot j at least sd beyond it
 //   reject  sorted spots j - 1 .. N - 1
+//
+// Derived from dials and cctbx_project (cctbx, rstbx, scitbx).
+// dials: Copyright (c) 2012 Diamond Light Source, Lawrence Berkeley National
+// Laboratory, United Kingdom Research and Innovation, and contributors. All
+// rights reserved. BSD-3-Clause; see third_party/dials/LICENSE.
+// cctbx: Copyright (c) 2006 - 2026, The Regents of the University of
+// California, through Lawrence Berkeley National Laboratory (subject to receipt
+// of any required approvals from the U.S. Dept. of Energy). All rights
+// reserved. BSD-3-Clause-LBNL; see third_party/cctbx/LICENSE.txt.
 
 #pragma once
 

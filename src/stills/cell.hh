@@ -1,6 +1,15 @@
 // A unit cell and a crystal model computed as cctbx's uctbx::unit_cell and
 // dxtbx's Crystal compute them, operation for operation, so that candidate
 // orientations built here equal dials' to the last bit.
+//
+// Derived from cctbx_project (cctbx, rstbx, scitbx) and dxtbx.
+// cctbx: Copyright (c) 2006 - 2026, The Regents of the University of
+// California, through Lawrence Berkeley National Laboratory (subject to receipt
+// of any required approvals from the U.S. Dept. of Energy). All rights
+// reserved. BSD-3-Clause-LBNL; see third_party/cctbx/LICENSE.txt.
+// dxtbx: Copyright (c) 2019 Diamond Light Source, Lawrence Berkeley National
+// Laboratory and the Science and Technology Facilities Council. All rights
+// reserved. BSD-3-Clause; see third_party/dxtbx/LICENSE.txt.
 
 #pragma once
 

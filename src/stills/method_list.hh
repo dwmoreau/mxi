@@ -5,6 +5,11 @@
 // does, the last method's error is rethrown.
 //
 // Follows dials/command_line/stills_process.py, Processor._index_impl.
+//
+// Derived from dials.
+// dials: Copyright (c) 2012 Diamond Light Source, Lawrence Berkeley National
+// Laboratory, United Kingdom Research and Innovation, and contributors. All
+// rights reserved. BSD-3-Clause; see third_party/dials/LICENSE.
 
 #pragma once
 

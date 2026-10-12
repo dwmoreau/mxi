@@ -8,6 +8,14 @@
 //
 // with w_x, w_y the inverse centroid variances and w_psi = 1e6, minimised by
 // Levenberg-Marquardt as dials' LevenbergMarquardtIterations does it.
+//
+// Derived from dials and dxtbx.
+// dials: Copyright (c) 2012 Diamond Light Source, Lawrence Berkeley National
+// Laboratory, United Kingdom Research and Innovation, and contributors. All
+// rights reserved. BSD-3-Clause; see third_party/dials/LICENSE.
+// dxtbx: Copyright (c) 2019 Diamond Light Source, Lawrence Berkeley National
+// Laboratory and the Science and Technology Facilities Council. All rights
+// reserved. BSD-3-Clause; see third_party/dxtbx/LICENSE.txt.
 
 #pragma once
 

@@ -1,6 +1,11 @@
 // Candidate crystal models from basis vectors, as dials'
 // candidate_orientation_matrices makes them (Gildea et al. 2014, section 2.4),
 // and global index assignment, as dials' AssignIndicesGlobal does it.
+//
+// Derived from dials.
+// dials: Copyright (c) 2012 Diamond Light Source, Lawrence Berkeley National
+// Laboratory, United Kingdom Research and Innovation, and contributors. All
+// rights reserved. BSD-3-Clause; see third_party/dials/LICENSE.
 
 #pragma once
 

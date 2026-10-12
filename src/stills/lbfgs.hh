@@ -6,6 +6,12 @@
 //
 // Only the path those fits reach is here: no user-supplied diagonal and no
 // gradient-only line search.
+//
+// Derived from cctbx_project (cctbx, rstbx, scitbx).
+// cctbx: Copyright (c) 2006 - 2026, The Regents of the University of
+// California, through Lawrence Berkeley National Laboratory (subject to receipt
+// of any required approvals from the U.S. Dept. of Energy). All rights
+// reserved. BSD-3-Clause-LBNL; see third_party/cctbx/LICENSE.txt.
 
 #pragma once
 
