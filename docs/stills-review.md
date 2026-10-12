@@ -169,8 +169,9 @@ differ from that only on an exact tie at the k-th place, which the corpus never 
 On every fft1d call of the R3 corpus (352), replayed: the same basis vectors in the same order,
 bit-identical, and the same refusal on the four with seven or fewer spots. With dials' fft1d
 replaced by this one, stills_process gives the same output on all five datasets (0 differences
-in frames, crystals, indexed and integrated reflections). Evidence:
-`stills_process_profiling/claude/rewrite/runs/r8b-fft1d/`.
+in frames, crystals, indexed and integrated reflections), both in the corpus configuration and
+with fft1d as the only method. It takes 0.50 to 0.71 of dials' time. Evidence:
+`stills_process_profiling/claude/rewrite/runs/r8b-fft1d/` and `runs/r8-methods/`.
 
 **The real-space grid search** (`src/stills/rsgs`). dials' `RealSpaceGridSearch` (Gildea et al.
 2014, section 3): each distinct target-cell length, ascending, along each direction of the
@@ -187,7 +188,8 @@ which must be glibc's, so the search runs at about dials' speed (0.97 to 1.0 of 
 
 On every grid-search call of the R3 corpus (143), replayed: the same basis vectors in the same
 order, bit-identical. With both of dials' searches replaced by these, stills_process gives the
-same output on all five datasets. Evidence: `stills_process_profiling/claude/rewrite/runs/r8c-rsgs/`.
+same output on all five datasets, both as the fallback and as the only method. Evidence:
+`stills_process_profiling/claude/rewrite/runs/r8c-rsgs/` and `runs/r8-methods/`.
 
 **The method fallback** (`src/stills/method_list.hh`). stills_process's `method_list`: each
 method's indexer is set up outside the error handling, so an error there ends the attempt; an
@@ -210,6 +212,18 @@ Not yet departures, but named as candidates:
   added crystals carry ~1 degree half-mosaicity); and the integration predictor at eta/2 below
   (completeness +6 to +8 points and multiplicity x1.3-1.6, but lysozyme CC1/2 -0.0091 +- 0.0057
   and 22-65 % more reflections to integrate). Both wait for the replacement model.
+- **Measured and not adopted: a coarser fft1d grid** (`runs/r8b-fft1d/s4/`, R8B-PLAN S4;
+  `Fft1dGrid`). Where the time goes at rstbx's grid: in single-pass searches 76-89 % is the scan,
+  whose cost goes as 1/grid^2; in adaptive ones (cells large for the resolution: 57 of
+  cytochrome's 79 calls, 50 of psii's 107) 73-79 % is the first pass, which at 0.016 rad
+  scans 24,700 directions, three times the 0.029 grid. Each cut changes which frames index:
+  raising the 0.029 cap to 0.05 (the data allow 0.03-0.09 on lysozyme, SACLA and most of
+  luciferase) takes the search to 0.54-0.56 of its time on lysozyme and SACLA (0.90 on
+  luciferase), but loses 1 of SACLA's 4 frames, 3 of psii's 46 and a net 2 of luciferase's 38
+  (4 lost, 2 gained); a 0.022 first pass takes cytochrome and psii to 0.62-0.65, but loses 2
+  psii frames and 238 of cytochrome's integrated reflections; stopping refinement at 1/16 of
+  the grid saves 2-7 % and moves frames both ways. None is free, so
+  rstbx's grid stays; a cut would have to be scored by merged statistics.
 - **The integration predictor's mosaic term.** dials' `NaveStillsReflectionPredictor` adds a
   quarter of the fitted full mosaicity where eq. 16 adds a half, so integration accepts a
   narrower band than the fit describes. Not in this library yet; it matters when integration
