@@ -118,52 +118,30 @@ public:
 
   std::size_t size() const { return xyz_.size(); }
 
-  // Directional_FFT followed by extract_directional_properties.
-  void evaluate(Direction &d) {
-    const std::size_t n = xyz_.size();
-    projections_.resize(n);
-    for (std::size_t k = 0; k < n; ++k)
-      projections_[k] = xyz_[k][0] * d.dvec[0] + xyz_[k][1] * d.dvec[1] +
-                        xyz_[k][2] * d.dvec[2];
-    const double pmin =
-        *std::min_element(projections_.begin(), projections_.end());
-    const double pmax =
-        *std::max_element(projections_.begin(), projections_.end());
-    std::size_t m =
-        1 + static_cast<std::size_t>((pmax - pmin) * kGranularity * amax_);
-    m = primecheck(m);
-    m = static_cast<std::size_t>(std::max<int>(2, static_cast<int>(m)));
-    const double delta_p = (pmax - pmin) / static_cast<double>(m - 1);
-    const fftpack::RealToComplex &fft = plan(m);
-    freq_.assign(fft.m_real(), 0.0);
-    for (std::size_t k = 0; k < n; ++k)
-      freq_[static_cast<std::size_t>(
-          static_cast<int>(((projections_[k] - pmin) / delta_p) + 0.5))] += 1.0;
-    scratch_.resize(std::max(scratch_.size(), m));
-    fft.forward(freq_.data(), scratch_.data());
-    const std::size_t n_complex = fft.n_complex();
-
-    std::size_t p_kmax = 0;
-    double p_kval = 0.0, p_square = 0.0;
-    for (std::size_t k = kF0Cutoff; k < n_complex; ++k) {
-      const double re = freq_[2 * k], im = freq_[2 * k + 1];
-      const double square = re * re + im * im;
-      if (square >= p_square * (1.0 - kKvalTieMargin)) {
-        const double value = std::abs(std::complex<double>(re, im));
-        if (value > p_kval) {
-          p_kval = value;
-          p_square = square;
-          p_kmax = k;
-        }
-      }
+  // Directional_FFT followed by extract_directional_properties, for every
+  // direction in dirs. Directions whose transforms have the same length are
+  // transformed kLanes at a time, one in each lane of fftpack::Lanes.
+  void evaluate_all(std::vector<Direction> &dirs) {
+    const std::size_t n_dirs = dirs.size();
+    extents_.resize(n_dirs);
+    for (std::size_t i = 0; i < n_dirs; ++i)
+      extents_[i] = extent(dirs[i]);
+    order_.resize(n_dirs);
+    for (std::size_t i = 0; i < n_dirs; ++i)
+      order_[i] = i;
+    std::stable_sort(order_.begin(), order_.end(),
+                     [&](std::size_t a, std::size_t b) {
+                       return extents_[a].m < extents_[b].m;
+                     });
+    for (std::size_t a = 0; a < n_dirs;) {
+      const std::size_t m = extents_[order_[a]].m;
+      std::size_t b = a + 1;
+      while (b < n_dirs && b - a < fftpack::kLanes &&
+             extents_[order_[b]].m == m)
+        ++b;
+      transform(dirs, &order_[a], b - a);
+      a = b;
     }
-    d.kmax = p_kmax;
-    d.kval = p_kval;
-    d.m = m;
-    d.delta_p = delta_p;
-    d.pmin = pmin;
-    d.uc_length =
-        static_cast<double>(p_kmax) / (static_cast<double>(m) * delta_p);
   }
 
   // indexing_api's refine_direction.
@@ -176,23 +154,99 @@ public:
     const Direction direction1(candidate.psi + incr, candidate.phi);
     const Vec3 rotaxisi = normalize(direction0.dvec.cross(direction1.dvec));
     const Vec3 rotaxisj = normalize(rotaxisi.cross(direction1.dvec));
-    Direction best = candidate;
+    std::vector<Direction> trials;
+    trials.reserve(25);
     for (int i = -2; i < 3; ++i) {
       const Vec3 rotate1 = unit_rotate(direction0.dvec, rotaxisi, -i * incr);
       for (int j = -2; j < 3; ++j) {
         const Vec3 rotate2 = unit_rotate(rotate1, rotaxisj, -j * incr);
         if (!(std::abs(1.0 - length(rotate2)) < 0.00001))
           throw std::logic_error("refine_direction: rotation not unit");
-        Direction trial(rotate2);
-        evaluate(trial);
-        if (trial.kval > best.kval)
-          best = trial;
+        trials.emplace_back(rotate2);
       }
     }
+    evaluate_all(trials);
+    Direction best = candidate;
+    for (const Direction &trial : trials)
+      if (trial.kval > best.kval)
+        best = trial;
     return refine_direction(best, incr, target_grid);
   }
 
 private:
+  // The projections' range and the transform length for one direction.
+  struct Extent {
+    double pmin = 0, delta_p = 0;
+    std::size_t m = 0;
+  };
+
+  void project(const Direction &d) {
+    const std::size_t n = xyz_.size();
+    projections_.resize(n);
+    for (std::size_t k = 0; k < n; ++k)
+      projections_[k] = xyz_[k][0] * d.dvec[0] + xyz_[k][1] * d.dvec[1] +
+                        xyz_[k][2] * d.dvec[2];
+  }
+
+  Extent extent(const Direction &d) {
+    project(d);
+    const double pmin =
+        *std::min_element(projections_.begin(), projections_.end());
+    const double pmax =
+        *std::max_element(projections_.begin(), projections_.end());
+    std::size_t m =
+        1 + static_cast<std::size_t>((pmax - pmin) * kGranularity * amax_);
+    m = primecheck(m);
+    m = static_cast<std::size_t>(std::max<int>(2, static_cast<int>(m)));
+    const double delta_p = (pmax - pmin) / static_cast<double>(m - 1);
+    return {pmin, delta_p, m};
+  }
+
+  // The histograms of up to kLanes directions of one transform length, one
+  // per lane, transformed together; each direction's peak is then found in
+  // its own lane. Unused lanes transform zeros.
+  void transform(std::vector<Direction> &dirs, const std::size_t *index,
+                 std::size_t count) {
+    const std::size_t m = extents_[index[0]].m;
+    const fftpack::RealToComplex &fft = plan(m);
+    freq_.assign(fft.m_real(), fftpack::Lanes{});
+    for (std::size_t l = 0; l < count; ++l) {
+      const Extent &e = extents_[index[l]];
+      project(dirs[index[l]]);
+      for (double p : projections_)
+        freq_[static_cast<std::size_t>(
+            static_cast<int>(((p - e.pmin) / e.delta_p) + 0.5))][l] += 1.0;
+    }
+    scratch_.resize(std::max(scratch_.size(), m));
+    fft.forward(freq_.data(), scratch_.data());
+    const std::size_t n_complex = fft.n_complex();
+    for (std::size_t l = 0; l < count; ++l) {
+      Direction &d = dirs[index[l]];
+      const Extent &e = extents_[index[l]];
+      std::size_t p_kmax = 0;
+      double p_kval = 0.0, p_square = 0.0;
+      for (std::size_t k = kF0Cutoff; k < n_complex; ++k) {
+        const double re = freq_[2 * k][l], im = freq_[2 * k + 1][l];
+        const double square = re * re + im * im;
+        if (square >= p_square * (1.0 - kKvalTieMargin)) {
+          const double value = std::abs(std::complex<double>(re, im));
+          if (value > p_kval) {
+            p_kval = value;
+            p_square = square;
+            p_kmax = k;
+          }
+        }
+      }
+      d.kmax = p_kmax;
+      d.kval = p_kval;
+      d.m = m;
+      d.delta_p = e.delta_p;
+      d.pmin = e.pmin;
+      d.uc_length =
+          static_cast<double>(p_kmax) / (static_cast<double>(m) * e.delta_p);
+    }
+  }
+
   const fftpack::RealToComplex &plan(std::size_t m) {
     auto it = plans_.find(m);
     if (it == plans_.end())
@@ -203,7 +257,10 @@ private:
   const std::vector<Vec3> &xyz_;
   double amax_;
   std::map<std::size_t, fftpack::RealToComplex> plans_;
-  std::vector<double> projections_, freq_, scratch_;
+  std::vector<double> projections_;
+  std::vector<Extent> extents_;
+  std::vector<std::size_t> order_;
+  std::vector<fftpack::Lanes> freq_, scratch_;
 };
 
 std::vector<Direction> construct_hemisphere_grid(double sampling) {
@@ -249,13 +306,12 @@ std::vector<Direction> simple_top_solutions(DpsCore &ai,
                                             std::size_t size,
                                             double cutoff_divisor) {
   const double kval_cutoff = static_cast<double>(ai.size()) / cutoff_divisor;
+  std::vector<Direction> evaluated = dirs;
+  ai.evaluate_all(evaluated);
   std::vector<Direction> kept;
-  for (const Direction &input : dirs) {
-    Direction d = input;
-    ai.evaluate(d);
+  for (const Direction &d : evaluated)
     if (d.kval > kval_cutoff)
       kept.push_back(d);
-  }
   if (kept.size() < 3)
     return kept;
   const std::vector<std::size_t> perm = sort_by_kval(kept);
@@ -273,13 +329,12 @@ hemisphere_top_solutions(DpsCore &ai, const std::vector<Direction> &dirs,
                          std::size_t size, double cutoff_divisor,
                          double max_cell) {
   const double kval_cutoff = static_cast<double>(ai.size()) / cutoff_divisor;
+  std::vector<Direction> evaluated = dirs;
+  ai.evaluate_all(evaluated);
   std::vector<Direction> kept;
-  for (const Direction &input : dirs) {
-    Direction d = input;
-    ai.evaluate(d);
+  for (const Direction &d : evaluated)
     if (d.uc_length < max_cell && d.kval > kval_cutoff)
       kept.push_back(d);
-  }
   if (kept.size() < 3)
     return kept;
   const std::vector<std::size_t> perm = sort_by_kval(kept);

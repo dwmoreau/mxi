@@ -20,18 +20,18 @@ namespace mxi::stills::fftpack {
 namespace {
 
 // scitbx's ref_3d_tp: (ix, iy, iz) -> start[(iz * ny + iy) * nx + ix].
-struct Ref3 {
-  double *p;
+template <class T> struct Ref3 {
+  T *p;
   std::size_t nx, ny;
-  double &operator()(std::size_t ix, std::size_t iy, std::size_t iz) const {
+  T &operator()(std::size_t ix, std::size_t iy, std::size_t iz) const {
     return p[(iz * ny + iy) * nx + ix];
   }
 };
 
-struct Ref2 {
-  double *p;
+template <class T> struct Ref2 {
+  T *p;
   std::size_t nx;
-  double &operator()(std::size_t ix, std::size_t iy) const {
+  T &operator()(std::size_t ix, std::size_t iy) const {
     return p[iy * nx + ix];
   }
 };
@@ -65,10 +65,11 @@ std::vector<int> factorize(std::size_t n) {
   return factors;
 }
 
-void passf2(std::size_t ido, std::size_t l1, double *cc_begin, double *ch_begin,
+template <class T>
+void passf2(std::size_t ido, std::size_t l1, T *cc_begin, T *ch_begin,
             const double *wa1) {
-  const Ref3 cc{cc_begin, ido, l1};
-  const Ref3 ch{ch_begin, ido, 2};
+  const Ref3<T> cc{cc_begin, ido, l1};
+  const Ref3<T> ch{ch_begin, ido, 2};
   for (std::size_t k = 0; k < l1; k++) {
     ch(0, 0, k) = cc(0, k, 0) + cc(0, k, 1);
     ch(ido - 1, 1, k) = cc(0, k, 0) - cc(0, k, 1);
@@ -80,8 +81,8 @@ void passf2(std::size_t ido, std::size_t l1, double *cc_begin, double *ch_begin,
       for (std::size_t i0 = 1; i0 < ido - 1; i0 += 2) {
         const std::size_t i1 = i0 + 1;
         const std::size_t ic = ido - i1;
-        const double tr2 = wa1[i0 - 1] * cc(i0, k, 1) + wa1[i0] * cc(i1, k, 1);
-        const double ti2 = wa1[i0 - 1] * cc(i1, k, 1) - wa1[i0] * cc(i0, k, 1);
+        const T tr2 = wa1[i0 - 1] * cc(i0, k, 1) + wa1[i0] * cc(i1, k, 1);
+        const T ti2 = wa1[i0 - 1] * cc(i1, k, 1) - wa1[i0] * cc(i0, k, 1);
         ch(i1, 0, k) = cc(i1, k, 0) + ti2;
         ch(ic, 1, k) = ti2 - cc(i1, k, 0);
         ch(i0, 0, k) = cc(i0, k, 0) + tr2;
@@ -97,14 +98,15 @@ void passf2(std::size_t ido, std::size_t l1, double *cc_begin, double *ch_begin,
   }
 }
 
-void passf3(std::size_t ido, std::size_t l1, double *cc_begin, double *ch_begin,
+template <class T>
+void passf3(std::size_t ido, std::size_t l1, T *cc_begin, T *ch_begin,
             const double *wa1, const double *wa2) {
-  const Ref3 cc{cc_begin, ido, l1};
-  const Ref3 ch{ch_begin, ido, 3};
+  const Ref3<T> cc{cc_begin, ido, l1};
+  const Ref3<T> ch{ch_begin, ido, 3};
   const double taur = -.5;
   const double taui = -taur * std::sqrt(3.0);
   for (std::size_t k = 0; k < l1; k++) {
-    const double cr2 = cc(0, k, 1) + cc(0, k, 2);
+    const T cr2 = cc(0, k, 1) + cc(0, k, 2);
     ch(0, 0, k) = cc(0, k, 0) + cr2;
     ch(0, 2, k) = taui * (cc(0, k, 2) - cc(0, k, 1));
     ch(ido - 1, 1, k) = cc(0, k, 0) + taur * cr2;
@@ -115,18 +117,18 @@ void passf3(std::size_t ido, std::size_t l1, double *cc_begin, double *ch_begin,
     for (std::size_t i0 = 1; i0 < ido - 1; i0 += 2) {
       const std::size_t i1 = i0 + 1;
       const std::size_t ic = ido - i1;
-      const double dr2 = wa1[i0 - 1] * cc(i0, k, 1) + wa1[i0] * cc(i1, k, 1);
-      const double di2 = wa1[i0 - 1] * cc(i1, k, 1) - wa1[i0] * cc(i0, k, 1);
-      const double dr3 = wa2[i0 - 1] * cc(i0, k, 2) + wa2[i0] * cc(i1, k, 2);
-      const double di3 = wa2[i0 - 1] * cc(i1, k, 2) - wa2[i0] * cc(i0, k, 2);
-      const double cr2 = dr2 + dr3;
-      const double ci2 = di2 + di3;
+      const T dr2 = wa1[i0 - 1] * cc(i0, k, 1) + wa1[i0] * cc(i1, k, 1);
+      const T di2 = wa1[i0 - 1] * cc(i1, k, 1) - wa1[i0] * cc(i0, k, 1);
+      const T dr3 = wa2[i0 - 1] * cc(i0, k, 2) + wa2[i0] * cc(i1, k, 2);
+      const T di3 = wa2[i0 - 1] * cc(i1, k, 2) - wa2[i0] * cc(i0, k, 2);
+      const T cr2 = dr2 + dr3;
+      const T ci2 = di2 + di3;
       ch(i0, 0, k) = cc(i0, k, 0) + cr2;
       ch(i1, 0, k) = cc(i1, k, 0) + ci2;
-      const double tr2 = cc(i0, k, 0) + taur * cr2;
-      const double ti2 = cc(i1, k, 0) + taur * ci2;
-      const double tr3 = taui * (di2 - di3);
-      const double ti3 = taui * (dr3 - dr2);
+      const T tr2 = cc(i0, k, 0) + taur * cr2;
+      const T ti2 = cc(i1, k, 0) + taur * ci2;
+      const T tr3 = taui * (di2 - di3);
+      const T ti3 = taui * (dr3 - dr2);
       ch(i0, 2, k) = tr2 + tr3;
       ch(ic - 1, 1, k) = tr2 - tr3;
       ch(i1, 2, k) = ti2 + ti3;
@@ -135,14 +137,15 @@ void passf3(std::size_t ido, std::size_t l1, double *cc_begin, double *ch_begin,
   }
 }
 
-void passf4(std::size_t ido, std::size_t l1, double *cc_begin, double *ch_begin,
+template <class T>
+void passf4(std::size_t ido, std::size_t l1, T *cc_begin, T *ch_begin,
             const double *wa1, const double *wa2, const double *wa3) {
-  const Ref3 cc{cc_begin, ido, l1};
-  const Ref3 ch{ch_begin, ido, 4};
+  const Ref3<T> cc{cc_begin, ido, l1};
+  const Ref3<T> ch{ch_begin, ido, 4};
   const double hsqt2 = .5 * std::sqrt(2.0);
   for (std::size_t k = 0; k < l1; k++) {
-    const double tr1 = cc(0, k, 1) + cc(0, k, 3);
-    const double tr2 = cc(0, k, 0) + cc(0, k, 2);
+    const T tr1 = cc(0, k, 1) + cc(0, k, 3);
+    const T tr2 = cc(0, k, 0) + cc(0, k, 2);
     ch(0, 0, k) = tr1 + tr2;
     ch(ido - 1, 3, k) = tr2 - tr1;
     ch(ido - 1, 1, k) = cc(0, k, 0) - cc(0, k, 2);
@@ -155,20 +158,20 @@ void passf4(std::size_t ido, std::size_t l1, double *cc_begin, double *ch_begin,
       for (std::size_t i0 = 1; i0 < ido - 1; i0 += 2) {
         const std::size_t i1 = i0 + 1;
         const std::size_t ic = ido - i1;
-        const double cr2 = wa1[i0 - 1] * cc(i0, k, 1) + wa1[i0] * cc(i1, k, 1);
-        const double ci2 = wa1[i0 - 1] * cc(i1, k, 1) - wa1[i0] * cc(i0, k, 1);
-        const double cr3 = wa2[i0 - 1] * cc(i0, k, 2) + wa2[i0] * cc(i1, k, 2);
-        const double ci3 = wa2[i0 - 1] * cc(i1, k, 2) - wa2[i0] * cc(i0, k, 2);
-        const double cr4 = wa3[i0 - 1] * cc(i0, k, 3) + wa3[i0] * cc(i1, k, 3);
-        const double ci4 = wa3[i0 - 1] * cc(i1, k, 3) - wa3[i0] * cc(i0, k, 3);
-        const double tr1 = cr2 + cr4;
-        const double tr4 = cr4 - cr2;
-        const double ti1 = ci2 + ci4;
-        const double ti4 = ci2 - ci4;
-        const double ti2 = cc(i1, k, 0) + ci3;
-        const double ti3 = cc(i1, k, 0) - ci3;
-        const double tr2 = cc(i0, k, 0) + cr3;
-        const double tr3 = cc(i0, k, 0) - cr3;
+        const T cr2 = wa1[i0 - 1] * cc(i0, k, 1) + wa1[i0] * cc(i1, k, 1);
+        const T ci2 = wa1[i0 - 1] * cc(i1, k, 1) - wa1[i0] * cc(i0, k, 1);
+        const T cr3 = wa2[i0 - 1] * cc(i0, k, 2) + wa2[i0] * cc(i1, k, 2);
+        const T ci3 = wa2[i0 - 1] * cc(i1, k, 2) - wa2[i0] * cc(i0, k, 2);
+        const T cr4 = wa3[i0 - 1] * cc(i0, k, 3) + wa3[i0] * cc(i1, k, 3);
+        const T ci4 = wa3[i0 - 1] * cc(i1, k, 3) - wa3[i0] * cc(i0, k, 3);
+        const T tr1 = cr2 + cr4;
+        const T tr4 = cr4 - cr2;
+        const T ti1 = ci2 + ci4;
+        const T ti4 = ci2 - ci4;
+        const T ti2 = cc(i1, k, 0) + ci3;
+        const T ti3 = cc(i1, k, 0) - ci3;
+        const T tr2 = cc(i0, k, 0) + cr3;
+        const T tr3 = cc(i0, k, 0) - cr3;
         ch(i0, 0, k) = tr1 + tr2;
         ch(ic - 1, 3, k) = tr2 - tr1;
         ch(i1, 0, k) = ti1 + ti2;
@@ -183,8 +186,8 @@ void passf4(std::size_t ido, std::size_t l1, double *cc_begin, double *ch_begin,
       return;
   }
   for (std::size_t k = 0; k < l1; k++) {
-    const double ti1 = -hsqt2 * (cc(ido - 1, k, 1) + cc(ido - 1, k, 3));
-    const double tr1 = hsqt2 * (cc(ido - 1, k, 1) - cc(ido - 1, k, 3));
+    const T ti1 = -hsqt2 * (cc(ido - 1, k, 1) + cc(ido - 1, k, 3));
+    const T tr1 = hsqt2 * (cc(ido - 1, k, 1) - cc(ido - 1, k, 3));
     ch(ido - 1, 0, k) = tr1 + cc(ido - 1, k, 0);
     ch(ido - 1, 2, k) = cc(ido - 1, k, 0) - tr1;
     ch(0, 1, k) = ti1 - cc(ido - 1, k, 2);
@@ -192,20 +195,21 @@ void passf4(std::size_t ido, std::size_t l1, double *cc_begin, double *ch_begin,
   }
 }
 
-void passf5(std::size_t ido, std::size_t l1, double *cc_begin, double *ch_begin,
+template <class T>
+void passf5(std::size_t ido, std::size_t l1, T *cc_begin, T *ch_begin,
             const double *wa1, const double *wa2, const double *wa3,
             const double *wa4) {
-  const Ref3 cc{cc_begin, ido, l1};
-  const Ref3 ch{ch_begin, ido, 5};
+  const Ref3<T> cc{cc_begin, ido, l1};
+  const Ref3<T> ch{ch_begin, ido, 5};
   const double tr11 = .309016994374947424102293417182819058860154589903;
   const double ti11 = .951056516295153572116439333379382143405698634126;
   const double tr12 = -.809016994374947424102293417182819058860154589903;
   const double ti12 = .587785252292473129168705954639072768597652437643;
   for (std::size_t k = 0; k < l1; k++) {
-    const double cr2 = cc(0, k, 4) + cc(0, k, 1);
-    const double ci5 = cc(0, k, 4) - cc(0, k, 1);
-    const double cr3 = cc(0, k, 3) + cc(0, k, 2);
-    const double ci4 = cc(0, k, 3) - cc(0, k, 2);
+    const T cr2 = cc(0, k, 4) + cc(0, k, 1);
+    const T ci5 = cc(0, k, 4) - cc(0, k, 1);
+    const T cr3 = cc(0, k, 3) + cc(0, k, 2);
+    const T ci4 = cc(0, k, 3) - cc(0, k, 2);
     ch(0, 0, k) = cc(0, k, 0) + cr2 + cr3;
     ch(ido - 1, 1, k) = cc(0, k, 0) + tr11 * cr2 + tr12 * cr3;
     ch(0, 2, k) = ti11 * ci5 + ti12 * ci4;
@@ -218,32 +222,32 @@ void passf5(std::size_t ido, std::size_t l1, double *cc_begin, double *ch_begin,
     for (std::size_t i0 = 1; i0 < ido - 1; i0 += 2) {
       const std::size_t i1 = i0 + 1;
       const std::size_t ic = ido - i1;
-      const double dr2 = wa1[i0 - 1] * cc(i0, k, 1) + wa1[i0] * cc(i1, k, 1);
-      const double di2 = wa1[i0 - 1] * cc(i1, k, 1) - wa1[i0] * cc(i0, k, 1);
-      const double dr3 = wa2[i0 - 1] * cc(i0, k, 2) + wa2[i0] * cc(i1, k, 2);
-      const double di3 = wa2[i0 - 1] * cc(i1, k, 2) - wa2[i0] * cc(i0, k, 2);
-      const double dr4 = wa3[i0 - 1] * cc(i0, k, 3) + wa3[i0] * cc(i1, k, 3);
-      const double di4 = wa3[i0 - 1] * cc(i1, k, 3) - wa3[i0] * cc(i0, k, 3);
-      const double dr5 = wa4[i0 - 1] * cc(i0, k, 4) + wa4[i0] * cc(i1, k, 4);
-      const double di5 = wa4[i0 - 1] * cc(i1, k, 4) - wa4[i0] * cc(i0, k, 4);
-      const double cr2 = dr2 + dr5;
-      const double ci5 = dr5 - dr2;
-      const double cr5 = di2 - di5;
-      const double ci2 = di2 + di5;
-      const double cr3 = dr3 + dr4;
-      const double ci4 = dr4 - dr3;
-      const double cr4 = di3 - di4;
-      const double ci3 = di3 + di4;
+      const T dr2 = wa1[i0 - 1] * cc(i0, k, 1) + wa1[i0] * cc(i1, k, 1);
+      const T di2 = wa1[i0 - 1] * cc(i1, k, 1) - wa1[i0] * cc(i0, k, 1);
+      const T dr3 = wa2[i0 - 1] * cc(i0, k, 2) + wa2[i0] * cc(i1, k, 2);
+      const T di3 = wa2[i0 - 1] * cc(i1, k, 2) - wa2[i0] * cc(i0, k, 2);
+      const T dr4 = wa3[i0 - 1] * cc(i0, k, 3) + wa3[i0] * cc(i1, k, 3);
+      const T di4 = wa3[i0 - 1] * cc(i1, k, 3) - wa3[i0] * cc(i0, k, 3);
+      const T dr5 = wa4[i0 - 1] * cc(i0, k, 4) + wa4[i0] * cc(i1, k, 4);
+      const T di5 = wa4[i0 - 1] * cc(i1, k, 4) - wa4[i0] * cc(i0, k, 4);
+      const T cr2 = dr2 + dr5;
+      const T ci5 = dr5 - dr2;
+      const T cr5 = di2 - di5;
+      const T ci2 = di2 + di5;
+      const T cr3 = dr3 + dr4;
+      const T ci4 = dr4 - dr3;
+      const T cr4 = di3 - di4;
+      const T ci3 = di3 + di4;
       ch(i0, 0, k) = cc(i0, k, 0) + cr2 + cr3;
       ch(i1, 0, k) = cc(i1, k, 0) + ci2 + ci3;
-      const double tr2 = cc(i0, k, 0) + tr11 * cr2 + tr12 * cr3;
-      const double ti2 = cc(i1, k, 0) + tr11 * ci2 + tr12 * ci3;
-      const double tr3 = cc(i0, k, 0) + tr12 * cr2 + tr11 * cr3;
-      const double ti3 = cc(i1, k, 0) + tr12 * ci2 + tr11 * ci3;
-      const double tr5 = ti11 * cr5 + ti12 * cr4;
-      const double ti5 = ti11 * ci5 + ti12 * ci4;
-      const double tr4 = ti12 * cr5 - ti11 * cr4;
-      const double ti4 = ti12 * ci5 - ti11 * ci4;
+      const T tr2 = cc(i0, k, 0) + tr11 * cr2 + tr12 * cr3;
+      const T ti2 = cc(i1, k, 0) + tr11 * ci2 + tr12 * ci3;
+      const T tr3 = cc(i0, k, 0) + tr12 * cr2 + tr11 * cr3;
+      const T ti3 = cc(i1, k, 0) + tr12 * ci2 + tr11 * ci3;
+      const T tr5 = ti11 * cr5 + ti12 * cr4;
+      const T ti5 = ti11 * ci5 + ti12 * ci4;
+      const T tr4 = ti12 * cr5 - ti11 * cr4;
+      const T ti4 = ti12 * ci5 - ti11 * ci4;
       ch(i0, 2, k) = tr2 + tr5;
       ch(ic - 1, 1, k) = tr2 - tr5;
       ch(i1, 2, k) = ti2 + ti5;
@@ -256,14 +260,15 @@ void passf5(std::size_t ido, std::size_t l1, double *cc_begin, double *ch_begin,
   }
 }
 
+template <class T>
 void passfg(std::size_t ido, std::size_t ip, std::size_t l1, std::size_t idl1,
-            double *cc_begin, double *c1_begin, double *c2_begin,
-            double *ch_begin, double *ch2_begin, const double *wa) {
-  const Ref3 cc{cc_begin, ido, ip};
-  const Ref3 c1{c1_begin, ido, l1};
-  const Ref2 c2{c2_begin, idl1};
-  const Ref3 ch{ch_begin, ido, l1};
-  const Ref2 ch2{ch2_begin, idl1};
+            T *cc_begin, T *c1_begin, T *c2_begin, T *ch_begin, T *ch2_begin,
+            const double *wa) {
+  const Ref3<T> cc{cc_begin, ido, ip};
+  const Ref3<T> c1{c1_begin, ido, l1};
+  const Ref2<T> c2{c2_begin, idl1};
+  const Ref3<T> ch{ch_begin, ido, l1};
+  const Ref2<T> ch2{ch2_begin, idl1};
   const double tpi = 8.0 * std::atan(1.0);
   const double arg = tpi / static_cast<double>(ip);
   double dsp, dcp;
@@ -463,7 +468,7 @@ RealToComplex::RealToComplex(std::size_t n_real)
   }
 }
 
-void RealToComplex::forward_compressed(double *c, double *ch) const {
+template <class T> void RealToComplex::forward_compressed(T *c, T *ch) const {
   if (n_ < 2)
     return;
   const double *wa = wa_.data();
@@ -525,12 +530,15 @@ void RealToComplex::forward_compressed(double *c, double *ch) const {
     c[i - 1] = ch[i - 1];
 }
 
-void RealToComplex::forward(double *seq, double *scratch) const {
+template <class T> void RealToComplex::forward(T *seq, T *scratch) const {
   forward_compressed(seq, scratch);
   std::copy_backward(seq + 1, seq + n_, seq + n_ + 1);
-  seq[1] = 0.0;
+  seq[1] = T{};
   if ((n_ & 1) == 0)
-    seq[n_ + 1] = 0.0;
+    seq[n_ + 1] = T{};
 }
+
+template void RealToComplex::forward(double *, double *) const;
+template void RealToComplex::forward(Lanes *, Lanes *) const;
 
 } // namespace mxi::stills::fftpack

@@ -17,6 +17,16 @@
 
 namespace mxi::stills::fftpack {
 
+// As many doubles as a vector register holds: four with AVX, otherwise the two
+// of SSE2. Arithmetic on Lanes is lane by lane, each lane exactly as on a
+// double.
+#if defined(__AVX__)
+inline constexpr std::size_t kLanes = 4;
+#else
+inline constexpr std::size_t kLanes = 2;
+#endif
+using Lanes = double __attribute__((vector_size(kLanes * sizeof(double))));
+
 class RealToComplex {
 public:
   explicit RealToComplex(std::size_t n_real);
@@ -27,13 +37,15 @@ public:
   // The doubles the transform reads and writes: 2 * n_complex().
   std::size_t m_real() const { return 2 * n_complex(); }
 
-  // In place: the first n_real() doubles of seq are the input; on return the
+  // In place: the first n_real() values of seq are the input; on return the
   // first m_real() hold n_complex() complex values (re, im). scratch holds at
-  // least n_real() doubles.
-  void forward(double *seq, double *scratch) const;
+  // least n_real() values. T is double, or Lanes for kLanes transforms at once,
+  // one in each lane, each computed exactly as the double transform computes
+  // it.
+  template <class T> void forward(T *seq, T *scratch) const;
 
 private:
-  void forward_compressed(double *c, double *ch) const;
+  template <class T> void forward_compressed(T *c, T *ch) const;
 
   std::size_t n_;
   std::vector<int> factors_;
