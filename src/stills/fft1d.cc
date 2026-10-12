@@ -41,6 +41,7 @@ constexpr double kKvalTieMargin = 1.0e-13;
 // a lane's largest by more than this fraction cannot be that lane's peak: the
 // fraction covers single precision's rounding of the square many times over.
 constexpr double kScreenMargin = 1.0e-5;
+static_assert(kScreenMargin > 1.0e3 * kKvalTieMargin);
 
 // The scalar a lane type is made of, and the lanes it holds.
 template <class L> struct LaneElement {

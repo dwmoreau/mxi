@@ -18,15 +18,6 @@ namespace {
 
 Vec3 unit(const Vec3 &v) { return v / v.norm(); }
 
-// The derivative of q rotated about the unit axis u by angle, for a change du
-// in the axis.
-Vec3 rotate_axis_derivative(const Vec3 &q, const Vec3 &u, double angle,
-                            const Vec3 &du) {
-  const double c = std::cos(angle), s = std::sin(angle);
-  return du * (u.dot(q) * (1.0 - c)) + u * (du.dot(q) * (1.0 - c)) +
-         du.cross(q) * s;
-}
-
 } // namespace
 
 Beam::Beam(const Vec3 &s0_)
