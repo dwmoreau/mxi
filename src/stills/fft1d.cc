@@ -226,31 +226,47 @@ private:
     }
     scratch.resize(std::max(scratch.size(), m));
     fft.forward(freq.data(), scratch.data());
+    // The peak of each lane, by rstbx's rule: every lane's squared magnitudes
+    // are screened at once against that lane's running bound, and only a
+    // coefficient that passes is compared by magnitude.
+    constexpr std::size_t kMax = fftpack::kFloatLanes;
+    static_assert(fftpack::kLanes <= kMax);
     const std::size_t n_complex = fft.n_complex();
+    std::size_t p_kmax[kMax] = {};
+    double p_kval[kMax] = {}, p_square[kMax] = {}, bound[kMax] = {};
+    for (std::size_t k = kF0Cutoff; k < n_complex; ++k) {
+      const L &re = freq[2 * k], &im = freq[2 * k + 1];
+      double square[kMax];
+      bool any = false;
+      for (std::size_t l = 0; l < count; ++l) {
+        const double r = re[l], i = im[l];
+        square[l] = r * r + i * i;
+        any |= square[l] >= bound[l];
+      }
+      if (!any)
+        continue;
+      for (std::size_t l = 0; l < count; ++l) {
+        if (!(square[l] >= bound[l]))
+          continue;
+        const double value = std::abs(std::complex<double>(re[l], im[l]));
+        if (value > p_kval[l]) {
+          p_kval[l] = value;
+          p_square[l] = square[l];
+          p_kmax[l] = k;
+          bound[l] = p_square[l] * (1.0 - kKvalTieMargin);
+        }
+      }
+    }
     for (std::size_t l = 0; l < count; ++l) {
       Direction &d = dirs[index[l]];
       const Extent &e = extents_[index[l]];
-      std::size_t p_kmax = 0;
-      double p_kval = 0.0, p_square = 0.0;
-      for (std::size_t k = kF0Cutoff; k < n_complex; ++k) {
-        const double re = freq[2 * k][l], im = freq[2 * k + 1][l];
-        const double square = re * re + im * im;
-        if (square >= p_square * (1.0 - kKvalTieMargin)) {
-          const double value = std::abs(std::complex<double>(re, im));
-          if (value > p_kval) {
-            p_kval = value;
-            p_square = square;
-            p_kmax = k;
-          }
-        }
-      }
-      d.kmax = p_kmax;
-      d.kval = p_kval;
+      d.kmax = p_kmax[l];
+      d.kval = p_kval[l];
       d.m = m;
       d.delta_p = e.delta_p;
       d.pmin = e.pmin;
       d.uc_length =
-          static_cast<double>(p_kmax) / (static_cast<double>(m) * e.delta_p);
+          static_cast<double>(p_kmax[l]) / (static_cast<double>(m) * e.delta_p);
     }
   }
 
