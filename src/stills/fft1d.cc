@@ -13,6 +13,9 @@
 #include <chrono>
 #include <cmath>
 #include <complex>
+#include <cstdint>
+#include <cstring>
+#include <limits>
 #include <map>
 #include <math.h>
 #include <utility>
@@ -34,6 +37,31 @@ constexpr std::size_t kF0Cutoff = 3;
 // rstbx's kval: coefficients whose squared magnitude is below the running
 // best's by more than this fraction are not compared by magnitude.
 constexpr double kKvalTieMargin = 1.0e-13;
+// Coefficients whose squared magnitude, in the transform's precision, is below
+// a lane's largest by more than this fraction cannot be that lane's peak: the
+// fraction covers single precision's rounding of the square many times over.
+constexpr double kScreenMargin = 1.0e-5;
+
+// The scalar a lane type is made of, and the lanes it holds.
+template <class L> struct LaneElement {
+  using type = double;
+};
+template <> struct LaneElement<fftpack::FloatLanes> {
+  using type = float;
+};
+template <class L> using Elem = typename LaneElement<L>::type;
+template <class L>
+constexpr std::size_t lanes_of = sizeof(L) / sizeof(Elem<L>);
+
+// Whether any lane of a vector comparison's result is set.
+template <class M> bool any_lane(const M &mask) {
+  std::uint64_t words[sizeof(M) / sizeof(std::uint64_t)];
+  std::memcpy(words, &mask, sizeof words);
+  std::uint64_t any = 0;
+  for (std::uint64_t w : words)
+    any |= w;
+  return any != 0;
+}
 
 // libm's pow, called as CPython's math.pow calls it: not folded into x * x.
 double py_pow(double x, double y) {
@@ -226,34 +254,45 @@ private:
     }
     scratch.resize(std::max(scratch.size(), m));
     fft.forward(freq.data(), scratch.data());
-    // The peak of each lane, by rstbx's rule: every lane's squared magnitudes
-    // are screened at once against that lane's running bound, and only a
-    // coefficient that passes is compared by magnitude.
+    // The peak of each lane, by rstbx's rule: the strongest coefficient from
+    // kF0Cutoff on, the first of a tie, compared by magnitude, with a
+    // coefficient whose squared magnitude falls short of the running peak's
+    // by more than kKvalTieMargin never compared. That peak is the first
+    // coefficient of greatest magnitude, so only coefficients within
+    // kScreenMargin of each lane's largest squared magnitude, found in the
+    // lanes' own precision, can be it, and the rule is applied to those.
     constexpr std::size_t kMax = fftpack::kFloatLanes;
     static_assert(fftpack::kLanes <= kMax);
     const std::size_t n_complex = fft.n_complex();
-    std::size_t p_kmax[kMax] = {};
-    double p_kval[kMax] = {}, p_square[kMax] = {}, bound[kMax] = {};
+    L top = L{};
     for (std::size_t k = kF0Cutoff; k < n_complex; ++k) {
-      const L &re = freq[2 * k], &im = freq[2 * k + 1];
-      double square[kMax];
-      bool any = false;
-      for (std::size_t l = 0; l < count; ++l) {
-        const double r = re[l], i = im[l];
-        square[l] = r * r + i * i;
-        any |= square[l] >= bound[l];
-      }
-      if (!any)
+      const L re = freq[2 * k], im = freq[2 * k + 1];
+      const L square = re * re + im * im;
+      scratch[k] = square;
+      top = (square > top) ? square : top;
+    }
+    L threshold;
+    for (std::size_t l = 0; l < lanes_of<L>; ++l)
+      threshold[l] = l < count && top[l] > 0
+                         ? static_cast<Elem<L>>(top[l] * (1.0 - kScreenMargin))
+                         : std::numeric_limits<Elem<L>>::infinity();
+    std::size_t p_kmax[kMax] = {};
+    double p_kval[kMax] = {}, bound[kMax] = {};
+    for (std::size_t k = kF0Cutoff; k < n_complex; ++k) {
+      if (!any_lane(scratch[k] >= threshold))
         continue;
       for (std::size_t l = 0; l < count; ++l) {
-        if (!(square[l] >= bound[l]))
+        if (!(scratch[k][l] >= threshold[l]))
           continue;
-        const double value = std::abs(std::complex<double>(re[l], im[l]));
+        const double r = freq[2 * k][l], i = freq[2 * k + 1][l];
+        const double square = r * r + i * i;
+        if (!(square >= bound[l]))
+          continue;
+        const double value = std::abs(std::complex<double>(r, i));
         if (value > p_kval[l]) {
           p_kval[l] = value;
-          p_square[l] = square[l];
           p_kmax[l] = k;
-          bound[l] = p_square[l] * (1.0 - kKvalTieMargin);
+          bound[l] = square * (1.0 - kKvalTieMargin);
         }
       }
     }
