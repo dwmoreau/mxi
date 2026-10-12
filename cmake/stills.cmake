@@ -15,6 +15,7 @@ if(NOT MXI_STILLS_GIT_REVISION)
 endif()
 
 add_library(mxi_stills STATIC
+  src/stills/apply_symmetry.cc
   src/stills/build_info.cc
   src/stills/candidates.cc
   src/stills/cell.cc
@@ -43,9 +44,11 @@ target_compile_options(mxi_stills PRIVATE -Wall -Wextra -Wpedantic
 
 add_executable(mxi_stills_tests
   tests/main.cc
+  tests/stills/test_apply_symmetry.cc
   tests/stills/test_candidates.cc
   tests/stills/test_geometry.cc
   tests/stills/test_known_symmetry.cc
+  tests/stills/test_method_list.cc
   tests/stills/test_outliers.cc
   tests/stills/test_refine.cc
 )

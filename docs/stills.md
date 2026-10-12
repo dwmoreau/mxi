@@ -55,6 +55,16 @@ library. The module wraps it with pybind11 (`bindings/`).
   the Hall symbol parser, and the space-group type with its change of basis to
   the reference setting. Its reference tables (`sgtbx_tables.cc`) are copied
   from cctbx by a script and are not edited by hand.
+- **Applying the target symmetry** (`src/stills/apply_symmetry.hh`).
+  `SymmetryHandler` holds the user's target as dials' handler does, and its
+  `apply_symmetry` puts a candidate into the target's lattice symmetry: the
+  candidate's metric subgroups (`iotbx_converter`), the best of the target's
+  Bravais type, the orientation constrained to that crystal system
+  (`constrain_orientation`, rstbx's L-BFGS fit), and the change of basis to
+  the user's setting.
+- **The method fallback** (`src/stills/method_list.hh`).
+  `index_with_method_list` tries `indexing.stills.method_list` in order, as
+  stills_process does.
 - **The entry point** (`src/stills/index.hh`). `index_still` maps the spots and
   returns "not indexed", because there is no search yet.
 - **The Python side** (`bindings/mxi_stills/dxtbx_adapter.py`). It builds the
@@ -68,8 +78,9 @@ The tests in `tests/stills/` (`mxi_stills_tests`) check the geometry against
 dials' own values for real spots on detectors of 256, 32, 8 and 1 panels, and
 the refinement against dials' own runs on real stills in five space groups,
 the outlier rejection and Nave fit against dials' own calls, and the cell
-reduction, candidates and index assignment, the space-group types and the
-known-symmetry filter against cctbx's and dials' own results. Those values are
+reduction, candidates and index assignment, the space-group types, the
+known-symmetry filter and apply_symmetry against cctbx's and dials' own
+results, and the method fallback against stub searches. Those values are
 in `tests/stills/real_stills.hh`, `tests/stills/real_refine.hh`,
 `tests/stills/real_outliers.hh`, `tests/stills/real_candidates.hh` and
 `tests/stills/real_symmetry.hh`, which are generated.

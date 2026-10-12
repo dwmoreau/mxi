@@ -49,3 +49,27 @@ def test_known_symmetry_accepts_its_own_cell():
 def test_known_symmetry_errors():
     with pytest.raises(mxi_stills.SgtbxError):
         mxi_stills.sgtbx_group("Q 1")
+
+
+def test_apply_symmetry_constrains_a_tetragonal_crystal():
+    # P 43 21 2 given by its Hall symbol; a slightly sheared crystal comes back
+    # tetragonal, in its own setting, with the identity change of basis.
+    h = mxi_stills.SymmetryHandler([78.0, 78.0, 37.0, 90, 90, 90], " P 4nw 2abw", 5.0)
+    assert h.target_bravais == "tP"
+    direct = np.array([[78.0, 0.01, 0.02], [-0.03, 78.1, 0.0], [0.05, 0.0, 37.0]])
+    a, b, c = direct
+    cell = [np.linalg.norm(a), np.linalg.norm(b), np.linalg.norm(c),
+            np.degrees(np.arccos(b @ c / np.linalg.norm(b) / np.linalg.norm(c))),
+            np.degrees(np.arccos(c @ a / np.linalg.norm(c) / np.linalg.norm(a))),
+            np.degrees(np.arccos(a @ b / np.linalg.norm(a) / np.linalg.norm(b)))]
+    out = h.apply_symmetry(np.linalg.inv(direct), cell)
+    assert out is not None
+    assert np.isclose(out["cell"][0], out["cell"][1])
+    assert np.allclose(out["cell"][3:], 90)
+    assert out["cb_op"][0] == (12, 0, 0, 0, 12, 0, 0, 0, 12, 12, 0, 0, 0, 144)
+
+
+def test_iotbx_converter_lists_the_target_type_only():
+    items = mxi_stills.iotbx_converter([78.0, 78.0, 37.0, 90, 90, 90], 5.0, "tP")
+    assert [i["bravais"] for i in items] == ["tP"]
+    assert items[0]["system"] == "tetragonal"

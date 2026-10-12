@@ -15,6 +15,7 @@
 #include <optional>
 #include <string>
 
+#include "stills/apply_symmetry.hh"
 #include "stills/known_symmetry.hh"
 #include "stills/sgtbx.hh"
 
@@ -112,6 +113,25 @@ sg::SpaceGroup hall_group(const std::string &hall,
   if (cb)
     g = g.change_basis(cb_from(*cb));
   return g;
+}
+
+mxi::Mat3 mat3_from(const Array &a, const char *name) {
+  if (a.ndim() != 2 || a.shape(0) != 3 || a.shape(1) != 3)
+    throw py::value_error(std::string(name) + ": expected shape (3, 3)");
+  mxi::Mat3 m;
+  for (py::ssize_t r = 0; r < 3; ++r)
+    for (py::ssize_t c = 0; c < 3; ++c)
+      m(static_cast<std::size_t>(r), static_cast<std::size_t>(c)) = a.at(r, c);
+  return m;
+}
+
+Array mat3_array(const mxi::Mat3 &m) {
+  Array out({py::ssize_t{3}, py::ssize_t{3}});
+  auto o = out.mutable_unchecked<2>();
+  for (py::ssize_t r = 0; r < 3; ++r)
+    for (py::ssize_t c = 0; c < 3; ++c)
+      o(r, c) = m(static_cast<std::size_t>(r), static_cast<std::size_t>(c));
+  return out;
 }
 
 py::dict matching_dict(const MatchingSymmetry &m) {
@@ -233,6 +253,80 @@ void bind_known_symmetry(py::module_ &m) {
       "dials' find_matching_symmetry(unit_cell, None, max_delta, "
       "target_bravais_str=...): None, or the best subgroup's "
       "max_angular_difference and cells.");
+
+  m.def(
+      "iotbx_converter",
+      [](const py::sequence &cell, double max_delta,
+         const std::string &target_bravais) {
+        py::list out;
+        for (const auto &item :
+             iotbx_converter(cell_from(cell), max_delta, target_bravais)) {
+          py::dict d;
+          d["max_angular_difference"] = item.max_angular_difference;
+          d["bravais"] = item.bravais;
+          d["system"] = item.system;
+          d["number"] = item.number;
+          d["cb_op_inp_best"] = cb_tuple(item.cb_op_inp_best);
+          d["subsym_cell"] = cell_tuple(item.subsym.cell);
+          d["ref_subsym_cell"] = cell_tuple(item.ref_subsym.cell);
+          d["best_subsym_cell"] = cell_tuple(item.best_subsym.cell);
+          out.append(d);
+        }
+        return out;
+      },
+      py::arg("unit_cell"), py::arg("max_delta"), py::arg("target_bravais"),
+      "rstbx's iotbx_converter(unit_cell, max_delta, target_bravais=...): the "
+      "metric subgroups in its sorted order.");
+
+  py::class_<SymmetryHandler>(m, "SymmetryHandler")
+      .def(py::init([](std::optional<py::sequence> cell,
+                       std::optional<std::string> hall, double max_delta) {
+             std::optional<UnitCell> c;
+             if (cell)
+               c = cell_from(*cell);
+             std::optional<sg::SpaceGroup> g;
+             if (hall)
+               g = sg::SpaceGroup::from_hall(*hall);
+             return SymmetryHandler(c, g, max_delta);
+           }),
+           py::arg("unit_cell"), py::arg("hall"), py::arg("max_delta") = 5.0,
+           "dials' SymmetryHandler(unit_cell, space_group, max_delta), the "
+           "space group given as a Hall symbol.")
+      .def_property_readonly("reference_cell",
+                             [](const SymmetryHandler &h) -> py::object {
+                               if (!h.reference_cell())
+                                 return py::none();
+                               return cell_tuple(*h.reference_cell());
+                             })
+      .def_property_readonly("reference_group",
+                             [](const SymmetryHandler &h) -> py::object {
+                               if (!h.reference_group())
+                                 return py::none();
+                               return group_tuple(*h.reference_group());
+                             })
+      .def_property_readonly("target_bravais", &SymmetryHandler::target_bravais)
+      .def("known_symmetry", &SymmetryHandler::known_symmetry,
+           py::arg("relative_length_tolerance") = 0.1,
+           py::arg("absolute_angle_tolerance") = 5.0,
+           py::arg("max_delta") = 5.0)
+      .def(
+          "apply_symmetry",
+          [](const SymmetryHandler &h, const Array &A,
+             const py::sequence &cell) -> py::object {
+            const auto r = h.apply_symmetry(mat3_from(A, "A"), cell_from(cell));
+            if (!r)
+              return py::none();
+            py::dict d;
+            d["A"] = mat3_array(r->model.A());
+            d["cell"] = cell_tuple(r->model.cell);
+            d["space_group"] = group_tuple(r->space_group);
+            d["cb_op"] = cb_tuple(r->cb_op);
+            return d;
+          },
+          py::arg("A"), py::arg("unit_cell"),
+          "dials' apply_symmetry on a crystal given by its A and cell: None, "
+          "or the constrained crystal (A, cell) in the input setting, its "
+          "space group, and the change of basis to the user's target.");
 
   py::class_<KnownSymmetry>(m, "KnownSymmetry")
       .def(

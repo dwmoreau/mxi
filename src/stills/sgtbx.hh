@@ -215,6 +215,11 @@ public:
   ChangeOfBasisOp mod_short() const {
     return ChangeOfBasisOp(c_.mod_short(), c_inv_.mod_short());
   }
+  // cctbx's change_of_basis_op(symbol, "", r_den, t_den): "x+1/2,y,z",
+  // "h,k,l" or "a+c,b,c".
+  static ChangeOfBasisOp from_string(const std::string &symbol,
+                                     int r_den = cb_r_den,
+                                     int t_den = cb_t_den);
   RotMx operator()(const RotMx &r) const;
   RtMx operator()(const RtMx &s) const;
   TrVec operator()(const TrVec &t, int sign_identity) const;

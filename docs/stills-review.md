@@ -128,6 +128,33 @@ where a best subgroup exists its obliquity and best cell, bit-identical; the tar
 volume window and Bravais type are identical. Evidence:
 `stills_process_profiling/claude/rewrite/runs/r8a-symmetry/`.
 
+**Applying the target symmetry** (`src/stills/apply_symmetry`). dials' `SymmetryHandler` (the
+target's Patterson group, its reference and best settings and the operators between them) and
+`apply_symmetry`: rstbx's `iotbx_converter` on the unreduced candidate cell (cctbx's
+`metric_subgroups` with the campaign's skip of subgroups whose metric supergroup has another
+Bravais type, then the 14 centric holohedries kept); the best subgroup by obliquity, first in
+`iotbx_converter`'s order on ties; the orientation moved to the reference setting through
+`crystal_orientation`; rstbx's `s_minimizer`, which fits the nine direct-matrix elements to
+the crystal system's metric relations with scitbx's L-BFGS (`min_iterations` 25, `max_calls`
+1000, no traditional convergence test), reading the metric through
+`crystal_orientation.unit_cell()` as rstbx does; dxtbx's `Crystal(a, b, c, space_group)` and
+`change_basis`. `iotbx_converter` sorts with rstbx's `bestcmp`, which treats obliquities within
+0.01 degree as equal and so is not a consistent order; the list is sorted as CPython 3.11's
+`list.sort` sorts it (one run, then binary insertion, for fewer than 64 items), because ties in
+the choice go to the first in that order. rstbx's `parse_reference` would read a pickle named
+`crystal_orientation` from the working directory, but opens it in text mode, which under Python 3
+always fails, so it never applies and is not ported.
+
+On every `apply_symmetry` call the R3 corpus made (1,189), replayed: the same outcome (19 find
+nothing), the change of basis identical as an integer operator, the constrained crystal's A
+and cell bit-identical, and its space group equal. Evidence:
+`stills_process_profiling/claude/rewrite/runs/r8a-symmetry/apply/`.
+
+**The method fallback** (`src/stills/method_list.hh`). stills_process's `method_list`: each
+method's indexer is set up outside the error handling, so an error there ends the attempt; an
+error from the search is kept and the next method tried; the first success is the result; the
+last error is rethrown. Checked with stub searches (tests/stills).
+
 Not yet departures, but named as candidates:
 - **The rotation-axis derivative.** dials' `drde` moves the unit axis e1 along the part of
   dq0 x s0 perpendicular to it; the derivative of e1 = normalise(q0 x s0) divides that by

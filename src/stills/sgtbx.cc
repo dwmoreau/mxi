@@ -1609,7 +1609,223 @@ TrVec parse_short_cb_op(ParseString &hs, int t_den) {
   return result;
 }
 
+// rt_mx.cpp's rationalize: v * den rounded half away from zero, refused
+// when it is more than 0.0005 from that.
+bool rationalize(double v, int &out, int den) {
+  if (den == 0)
+    return false;
+  v *= den;
+  out = v < 0. ? static_cast<int>(v - .5) : static_cast<int>(v + .5);
+  v -= out;
+  v /= den;
+  if (v < 0.)
+    v = -v;
+  return !(v > .0005);
+}
+
+[[noreturn]] void parse_error(const char *what) {
+  throw Error(std::string("Parse error: ") + what);
+}
+
+// cctbx's rt_mx_from_string: "x+1/2,y,z", "h,k,l" or "a+c,b,c" up to one of
+// stop_chars (or the end).
+struct ParsedRtMx {
+  RtMx s;
+  bool have_xyz = false, have_hkl = false, have_abc = false;
+};
+
+ParsedRtMx parse_rt_mx(ParseString &input, const char *stop_chars, int r_den,
+                       int t_den) {
+  ParsedRtMx out{RtMx(r_den, t_den)};
+  RtMx &s = out.s;
+  int row = 0, column = -1, sign = 1, mult = 0;
+  double val_r[3] = {0., 0., 0.};
+  double val_t = 0., value = 0.;
+  bool have_value = false;
+  constexpr unsigned P_Add = 0x01u, P_Mult = 0x02u, P_Value = 0x04u,
+                     P_XYZ = 0x08u, P_Comma = 0x10u;
+  unsigned p_mode = P_Add | P_Value | P_XYZ;
+  auto is_stop = [&](char c) { return std::strchr(stop_chars, c) != nullptr; };
+  for (;; input.skip()) {
+    const char c = input();
+    if (is_stop(c) || !std::isspace(static_cast<unsigned char>(c))) {
+      const char k = is_stop(c) ? '\0' : c;
+      switch (k) {
+      case '_':
+        break;
+      case '+':
+      case '-':
+        sign = k == '+' ? 1 : -1;
+        if ((p_mode & P_Add) == 0)
+          parse_error("unexpected character");
+        if (column >= 0)
+          val_r[column] += value;
+        else
+          val_t += value;
+        value = 0.;
+        have_value = false;
+        column = -1;
+        mult = 0;
+        p_mode = P_Value | P_XYZ;
+        break;
+      case '*':
+        if ((p_mode & P_Mult) == 0)
+          parse_error("unexpected character");
+        mult = 1;
+        p_mode = P_Value | P_XYZ;
+        break;
+      case '/':
+      case ':':
+        if ((p_mode & P_Mult) == 0)
+          parse_error("unexpected character");
+        mult = -1;
+        p_mode = P_Value;
+        break;
+      case '.':
+      case '0':
+      case '1':
+      case '2':
+      case '3':
+      case '4':
+      case '5':
+      case '6':
+      case '7':
+      case '8':
+      case '9': {
+        if ((p_mode & P_Value) == 0)
+          parse_error("unexpected character");
+        const char *begin = input.peek();
+        char *end = nullptr;
+        double v = std::strtod(begin, &end);
+        if (end == begin)
+          parse_error("unexpected character");
+        input.skip(static_cast<std::size_t>(end - begin) - 1);
+        if (sign == -1) {
+          v = -v;
+          sign = 1;
+        }
+        if (mult == 1)
+          value *= v;
+        else if (mult == -1) {
+          if (v != 0.)
+            value /= v;
+          else if (value != 0.)
+            parse_error("unexpected character");
+        } else
+          value = v;
+        have_value = true;
+        p_mode = P_Comma | P_Add | P_Mult | P_XYZ;
+        break;
+      }
+      case 'X':
+      case 'x':
+      case 'Y':
+      case 'y':
+      case 'Z':
+      case 'z':
+      case 'H':
+      case 'h':
+      case 'K':
+      case 'k':
+      case 'L':
+      case 'l':
+      case 'A':
+      case 'a':
+      case 'B':
+      case 'b':
+      case 'C':
+      case 'c': {
+        const char lower =
+            static_cast<char>(std::tolower(static_cast<unsigned char>(k)));
+        if (lower == 'x' || lower == 'y' || lower == 'z') {
+          column = lower - 'x';
+          out.have_xyz = true;
+        } else if (lower == 'h' || lower == 'k' || lower == 'l') {
+          column = lower == 'h' ? 0 : lower == 'k' ? 1 : 2;
+          out.have_hkl = true;
+        } else {
+          column = lower - 'a';
+          out.have_abc = true;
+        }
+        if ((out.have_xyz && out.have_hkl) || (out.have_xyz && out.have_abc) ||
+            (out.have_hkl && out.have_abc))
+          parse_error("mix of notations");
+        if ((p_mode & P_XYZ) == 0)
+          parse_error("unexpected character");
+        if (!have_value) {
+          value = sign;
+          sign = 1;
+        }
+        p_mode = P_Comma | P_Add | P_Mult;
+        break;
+      }
+      case ',':
+      case ';':
+        if (row == 2)
+          parse_error("too many row expressions");
+        [[fallthrough]];
+      case '\0':
+        if ((p_mode & P_Comma) == 0)
+          parse_error("unexpected end of input");
+        if (column >= 0)
+          val_r[column] += value;
+        else
+          val_t += value;
+        for (int i = 0; i < 3; ++i)
+          if (!rationalize(val_r[i],
+                           s.r()[static_cast<std::size_t>(row * 3 + i)], r_den))
+            throw RationalError(
+                "Unsuitable value for rational rotation matrix.");
+        if (!rationalize(val_t, s.t()[static_cast<std::size_t>(row)], t_den))
+          throw RationalError(
+              "Unsuitable value for rational translation vector.");
+        row++;
+        column = -1;
+        sign = 1;
+        mult = 0;
+        val_r[0] = val_r[1] = val_r[2] = 0.;
+        val_t = 0.;
+        value = 0.;
+        have_value = false;
+        p_mode = P_Add | P_Value | P_XYZ;
+        break;
+      default:
+        parse_error("unexpected character");
+      }
+    }
+    if (is_stop(input()))
+      break;
+  }
+  if (row != 3)
+    parse_error("not enough row expressions");
+  return out;
+}
+
+// change_of_basis_op(symbol, stop_chars, r_den, t_den).
+ChangeOfBasisOp parse_change_of_basis_op(ParseString &input,
+                                         const char *stop_chars, int r_den,
+                                         int t_den) {
+  const ParsedRtMx p = parse_rt_mx(input, stop_chars, r_den, t_den);
+  if (p.have_hkl) {
+    if (!p.s.t().is_zero())
+      throw Error("h,k,l change of basis with a translation part");
+    const RtMx c_inv(p.s.r().transpose(), p.s.t());
+    return ChangeOfBasisOp(c_inv.inverse(), c_inv);
+  }
+  if (p.have_abc) {
+    const RtMx c_inv(p.s.r().transpose(), p.s.t());
+    return ChangeOfBasisOp(c_inv.inverse(), c_inv);
+  }
+  return ChangeOfBasisOp(p.s);
+}
+
 } // namespace
+
+ChangeOfBasisOp ChangeOfBasisOp::from_string(const std::string &symbol,
+                                             int r_den, int t_den) {
+  ParseString ps{symbol};
+  return parse_change_of_basis_op(ps, "", r_den, t_den);
+}
 
 std::size_t SpaceGroup::parse_hall_symbol(const std::string &symbol,
                                           bool pedantic,
@@ -1756,10 +1972,14 @@ std::size_t SpaceGroup::parse_hall_symbol(const std::string &symbol,
   ChangeOfBasisOp cb_op(0, 0);
   if (hs() == '(') {
     hs.skip();
+    hs.mark = hs.i;
     const TrVec t = parse_short_cb_op(hs, cb_t_den);
-    if (!t.is_valid())
-      fail("Only the short (origin shift) change-of-basis form is supported.");
-    cb_op = ChangeOfBasisOp(RtMx(t, cb_r_den));
+    if (t.is_valid()) {
+      cb_op = ChangeOfBasisOp(RtMx(t, cb_r_den));
+    } else {
+      hs.i = hs.mark;
+      cb_op = parse_change_of_basis_op(hs, ")", cb_r_den, cb_t_den);
+    }
     while (hall_is_space(hs()))
       hs.skip();
     if (hs() != ')')
