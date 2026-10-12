@@ -63,6 +63,12 @@ target_link_libraries(mxi_stills_tests PRIVATE mxi_stills)
 target_compile_options(mxi_stills_tests PRIVATE -Wall -Wextra)
 add_test(NAME mxi_stills_tests COMMAND mxi_stills_tests)
 
+# Replays stills written by claude/scripts/rewrite/r10_dump.py through the
+# indexer without Python, for profiling and for bit-for-bit comparisons.
+add_executable(mxi_stills_replay apps/mxi_stills_replay.cc)
+target_link_libraries(mxi_stills_replay PRIVATE mxi_stills)
+target_compile_options(mxi_stills_replay PRIVATE -Wall -Wextra)
+
 if(MXI_PYTHON)
   find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
   find_package(pybind11 CONFIG REQUIRED)
